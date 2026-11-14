@@ -40,6 +40,8 @@ Changes to the data, the filter or the fitness function go into `main` first and
 
 Every candidate is scored through `ekf.make_cost_fn`, so the budget, the convergence curve and the timing match the other optimizers.
 
+While it runs, every evaluation is appended to `results/PSO/pso_log.csv` as soon as its iteration is scored. Each row holds `seed, iteration, particle, k, fitness, best_so_far, elapsed` and the 7 θ values, so you can open the file mid-run to watch progress. Rerunning a seed replaces that seed's rows. A progress line is also printed after each iteration.
+
 ```bash
 python PSO.py                                        # all seeds -> results/PSO/
 python PSO.py --seeds 0 --max-evals 40 --swarm 8     # quick check
