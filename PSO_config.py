@@ -8,7 +8,7 @@ remain in the existing `ekf` package and are not modified by this file.
 SWARM_SIZE = 20             # 20 particles x 50 iterations = 1000 evaluations
 MAX_EVALS = 1000
 SEEDS = (0, 1, 2, 3, 4)
-N_WORKERS = 1
+N_WORKERS = 10
 
 # PSO coefficients (global-best topology, linearly decreasing inertia)
 INERTIA_START = 0.90        # w at the first iteration
