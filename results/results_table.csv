@@ -1,2 +1,0 @@
-optimizer,n_seeds,rmse_h,delta_vs_baseline,delta_vs_gps,mean_nis,delta_rmse_mean,delta_rmse_max,evals_to_converge,evals_to_best,n_evals,t_total,t_eval,rmse_h_std,delta_vs_baseline_std,delta_vs_gps_std,mean_nis_std,delta_rmse_mean_std,delta_rmse_max_std,evals_to_converge_std,evals_to_best_std,n_evals_std,t_total_std,t_eval_std
-baseline,1,3.7752999487175414,0.0,0.17128494411900919,0.9682558504258694,0.02189453669928998,0.049126997922263715,1.0,1.0,1.0,7.96481639999547,7.96481639999547,,,,,,,,,,,
