@@ -1,4 +1,0 @@
-,rmse_h_held_out,rmse_h_held_out,robustness_std,robustness_std,evals_to_best,evals_to_best,wall_time,wall_time
-,mean,std,mean,std,mean,std,mean,std
-optimizer,,,,,,,,
-baseline,3.6029333800569074,,0.02911396816096783,,0.0,,8.045187000010628,
