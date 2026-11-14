@@ -221,6 +221,24 @@ The `results` branch plots every optimizer run against the baseline on four axes
 - Scoring: always `ekf.make_cost_fn(data)`.
 - Each optimizer branch puts its settings (population size, budget, seeds and algorithm-specific values) in its own config file.
 
+## Results (this branch)
+
+| Path | Holds |
+|---|---|
+| `results/baseline/` | `THETA0` run: trajectory, innovations, GPS vs ground truth, error time series, error summary and `baseline_parameters.csv` |
+| `results/<GA, PSO, DE, GWO>/` | Each optimizer's runs, merged in from its branch, with `optimized_parameters.csv` holding one row per seed |
+| `results/response_4d.html`, `results/response_4d.png` | 4D response graph: held-out RMSE, robustness and compute on the three axes, wall time as colour |
+| `results/response_summary.csv` | Mean and standard deviation of the four metrics per optimizer |
+
+To refresh after adding optimizer results:
+
+```bash
+python run_baseline.py
+python plot_response.py
+```
+
+`plot_response.py` needs `matplotlib`, and `plotly` for the interactive graph. Each `optimized_parameters.csv` needs the columns `optimizer, seed, rmse_h_held_out, robustness_std, evals_to_best, wall_time`; `robustness_std` comes from `ekf.robustness(data, best_theta)["std"]`.
+
 ## Data
 
 Files hold one ETH Zurich flight of about 2,714 s. They keep the original dataset's names but **hold cleaned values**: SI units, a local ENU frame, repeated GPS rows removed, sensors starting together and ground-truth timestamps corrected. Unusual samples are kept and flagged, because handling them is the filter's job.
