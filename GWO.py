@@ -101,17 +101,20 @@ def run_gwo(tracker, seed=0, population_size=None, log_path=None):
     return tracker
 
 
-def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=None, n_workers=None):
+def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=None, n_workers=None,
+                   backend=None, data=None):
     max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
     seeds = tuple(cfg.SEEDS if seeds is None else seeds)
     out_dir = Path(cfg.OUTPUT_DIR if out_dir is None else out_dir)
     population_size = int(cfg.POPULATION_SIZE if population_size is None else population_size)
     n_workers = int(cfg.N_WORKERS if n_workers is None else n_workers)
+    backend = cfg.BACKEND if backend is None else backend
     if max_evals < 1 or not seeds or n_workers < 1:
         raise ValueError("Require max_evals >= 1, at least one seed, and n_workers >= 1")
 
-    print("Loading ETH flight data...")
-    data = ekf.load_data()
+    if data is None:
+        print("Loading ETH flight data...")
+        data = ekf.load_data()
     print("Computing baseline references...")
     rmse_baseline = ekf.fitness(data, ekf.THETA0)
     rmse_gps = ekf.gps_rmse(data)
@@ -119,8 +122,8 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=Non
     print(f"Raw GPS:               {rmse_gps:.4f} m")
 
     for seed in seeds:
-        print(f"\n=== GWO | seed={seed} | budget={max_evals} ===")
-        tracker = ekf.make_cost_fn(data, max_evals=max_evals, n_workers=n_workers)
+        print(f"\n=== GWO | seed={seed} | budget={max_evals} | backend={backend} ===")
+        tracker = ekf.make_cost_fn(data, max_evals=max_evals, n_workers=n_workers, backend=backend)
         try:
             log_path = out_dir / "gwo_log.csv"
             run_gwo(tracker, seed=seed, population_size=population_size,
@@ -128,13 +131,15 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=Non
             if tracker.best_theta is None:
                 raise RuntimeError("GWO completed without evaluating a candidate")
             row, _ = ekf.run_summary(data, tracker, "GWO", seed,
-                                     rmse_gps=rmse_gps, rmse_baseline=rmse_baseline)
+                                     rmse_gps=rmse_gps, rmse_baseline=rmse_baseline,
+                                     population_size=population_size)
             ekf.save_run(out_dir, row, tracker)
             print(f"Best whole-flight RMSE_h: {row['rmse_h']:.4f} m")
             print(f"Change vs baseline EKF:   {row['delta_vs_baseline']:+.4f} m")
             print(f"Change vs raw GPS:        {row['delta_vs_gps']:+.4f} m")
             print(f"Evaluations:              {row['n_evals']}/{max_evals}")
-            print(f"Time:                     {row['t_total']:.2f} s")
+            print(f"Time:                     {row['t_total']:.2f} s "
+                  f"(objective {row['t_objective']:.2f} s, {row['n_generations']} generations)")
         finally:
             tracker.close()
     print(f"\nSaved GWO run files to: {out_dir.resolve()}")
@@ -146,9 +151,11 @@ def main():
     parser.add_argument("--seeds", type=int, nargs="+", default=list(cfg.SEEDS))
     parser.add_argument("--population-size", type=int, default=cfg.POPULATION_SIZE)
     parser.add_argument("--workers", type=int, default=cfg.N_WORKERS)
+    parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
     parser.add_argument("--out", default=cfg.OUTPUT_DIR)
     args = parser.parse_args()
-    run_experiment(args.max_evals, args.seeds, args.out, args.population_size, args.workers)
+    run_experiment(args.max_evals, args.seeds, args.out, args.population_size, args.workers,
+                   backend=args.backend)
 
 
 if __name__ == "__main__":
