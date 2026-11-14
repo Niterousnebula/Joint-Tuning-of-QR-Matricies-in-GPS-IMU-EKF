@@ -52,10 +52,10 @@ def perturb(data, gps_sigma=0.0, vel_sigma=0.0, accel_sigma=0.0, gyro_sigma=0.0,
     return out
 
 
-# Copies of the flight used to measure how stable a tuned filter is.
-# Each entry is passed to `perturb` as keyword arguments.
-ROBUSTNESS_DATASETS = {
-    "clean": {},
+# Predefined perturbations used to measure robustness. Each entry is passed to `perturb`
+# as keyword arguments. They are evaluated on a fixed, already tuned theta and are never
+# part of the optimization objective.
+PERTURBATIONS = {
     "gps_noise_1m": {"gps_sigma": 1.0},
     "gps_noise_2m": {"gps_sigma": 2.0},
     "gps_vel_noise": {"vel_sigma": 0.3},
@@ -64,6 +64,6 @@ ROBUSTNESS_DATASETS = {
 }
 
 
-def robustness_datasets(data):
-    """All robustness copies of `data`, keyed by name."""
-    return {name: perturb(data, **kwargs) for name, kwargs in ROBUSTNESS_DATASETS.items()}
+def perturbed_datasets(data):
+    """All perturbed copies of `data`, keyed by name."""
+    return {name: perturb(data, **kwargs) for name, kwargs in PERTURBATIONS.items()}
