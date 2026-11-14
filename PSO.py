@@ -7,16 +7,40 @@ Global-best PSO over the 7-D log10 decision vector inside [ekf.LOWER, ekf.UPPER]
 Every candidate is scored by the canonical fitness through ekf.make_cost_fn, which
 enforces the evaluation budget and records the convergence curve. Results go to
 <OUTPUT_DIR>/runs.csv (one row per seed) and <OUTPUT_DIR>/convergence_seed<s>.csv.
+While a run is going, every evaluation is appended to <OUTPUT_DIR>/<LOG_FILE>.
 """
 import argparse
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
 import ekf
 import PSO_config as cfg
 
 
-def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE):
+class RunLog:
+    """Live CSV log: one row per evaluation, appended as soon as a batch is scored."""
+
+    def __init__(self, path, seed):
+        self.path = Path(path)
+        self.seed = seed
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        if self.path.exists():                       # rerunning a seed replaces its old rows
+            old = pd.read_csv(self.path)
+            old[old["seed"] != seed].to_csv(self.path, index=False)
+
+    def write(self, cost_fn, iteration, n_new):
+        rows = pd.DataFrame(cost_fn.history[cost_fn.n_evals - n_new:])
+        rows.insert(0, "particle", np.arange(n_new))
+        rows.insert(0, "iteration", iteration)
+        rows.insert(0, "seed", self.seed)
+        rows.to_csv(self.path, mode="a", index=False, header=not self.path.exists())
+        print(f"seed {self.seed}  iter {iteration:3d}  k {cost_fn.n_evals:5d}  "
+              f"best RMSE_h {cost_fn.best_cost:.4f} m  elapsed {cost_fn.t_total:7.0f} s", flush=True)
+
+
+def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE, log=None):
     """Minimise cost_fn until its budget runs out. Returns (best_theta, best_cost)."""
     lower, upper = cost_fn.lower, cost_fn.upper
     span = upper - lower
@@ -28,6 +52,8 @@ def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE):
     x = lower + rng.random((swarm_size, dim)) * span
     v = rng.uniform(-v_max, v_max, (swarm_size, dim))
     cost = cost_fn.evaluate_many(x)
+    if log:
+        log.write(cost_fn, 0, len(cost))
     x = x[:len(cost)]
     v = v[:len(cost)]
     p_best, p_cost = x.copy(), cost.copy()
@@ -49,6 +75,8 @@ def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE):
 
         cost = cost_fn.evaluate_many(x)
         n = len(cost)
+        if log:
+            log.write(cost_fn, it, n)
         improved = cost < p_cost[:n]
         p_best[:n][improved] = x[:n][improved]
         p_cost[:n][improved] = cost[improved]
@@ -63,12 +91,13 @@ def main(seeds, max_evals, swarm_size, n_workers, out_dir):
     data = ekf.load_data()
     rmse_gps = ekf.gps_rmse(data)
     rmse_baseline = ekf.fitness(data, ekf.THETA0)   # reference only, not part of the budget
-    print(f"Raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m")
+    print(f"Raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m", flush=True)
 
     for seed in seeds:
         rng = np.random.default_rng(cfg.RANDOM_SEED + seed)
+        log = RunLog(Path(out_dir) / cfg.LOG_FILE, seed)
         with ekf.make_cost_fn(data, max_evals=max_evals, n_workers=n_workers) as cost_fn:
-            best_theta, best_cost = pso(cost_fn, rng, swarm_size)
+            best_theta, best_cost = pso(cost_fn, rng, swarm_size, log)
             row, _ = ekf.run_summary(data, cost_fn, "PSO", seed,
                                      rmse_gps=rmse_gps, rmse_baseline=rmse_baseline)
             ekf.save_run(out_dir, row, cost_fn)
@@ -76,7 +105,7 @@ def main(seeds, max_evals, swarm_size, n_workers, out_dir):
               f"(vs baseline {row['delta_vs_baseline']:+.3f} m, vs GPS {row['delta_vs_gps']:+.3f} m), "
               f"robustness mean {row['delta_rmse_mean']:+.3f} m, "
               f"converged at k = {row['evals_to_converge']}, N_eval {row['n_evals']}, "
-              f"T_total {row['t_total']:.0f} s")
+              f"T_total {row['t_total']:.0f} s", flush=True)
 
 
 if __name__ == "__main__":

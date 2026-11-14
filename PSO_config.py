@@ -20,3 +20,4 @@ VELOCITY_CLAMP_FRACTION = 0.20   # |v| limit as a fraction of each parameter's b
 # Reproducibility and output
 RANDOM_SEED = 0             # run seed s uses RANDOM_SEED + s
 OUTPUT_DIR = "results/PSO"
+LOG_FILE = "pso_log.csv"    # in OUTPUT_DIR; one row per evaluation, written live
