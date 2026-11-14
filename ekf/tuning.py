@@ -1,10 +1,19 @@
-"""Decision vector, bounds, cost function and scoring shared by every optimizer."""
+"""Decision vector, the canonical fitness function, and the benchmark metrics.
+
+Q/R calibration is offline and uses the complete flight. Every candidate is scored by
+one full-flight EKF run and its whole-flight horizontal RMSE (`fitness`). The baseline
+and every optimizer call this same function, through `FitnessTracker`, which also
+counts evaluations, records the best-so-far curve and times the run.
+"""
 import time
+from multiprocessing import Pool
+from pathlib import Path
 
 import numpy as np
+import pandas as pd
 
-from .data import robustness_datasets
-from .filter import init_state, run_ekf
+from .data import PERTURBATIONS, perturb
+from .filter import N_MEAS, init_state, run_ekf
 
 # log10 of the continuous noise densities and GPS variances
 THETA_NAMES = ["log_q_acc", "log_q_gyro", "log_q_ba", "log_q_bg",
@@ -15,8 +24,9 @@ UPPER = THETA0 + np.array([3.0, 3.0, 3.0, 3.0, 2.0, 2.0, 2.0])
 LOWER_TIGHT = THETA0 - np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
 UPPER_TIGHT = THETA0 + np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
 
-T_SPLIT = 1364.04       # s; tune before this time, hold out after it
-PENALTY = 1000.0        # m; cost of a run that fails
+PENALTY = 1000.0        # m; fitness of a run that fails
+NIS_DOF = N_MEAS        # GPS position + velocity: a consistent filter averages NIS = 6
+CONVERGENCE_FRACTION = 0.99
 
 
 def theta_to_QR(theta):
@@ -27,11 +37,21 @@ def theta_to_QR(theta):
     return Q_c, R
 
 
+def clip_theta(theta, lower=LOWER, upper=UPPER):
+    return np.clip(np.asarray(theta, dtype=float), lower, upper)
+
+
+# ---------------------------------------------------------------------------
+# Errors against ground truth
+# ---------------------------------------------------------------------------
+def position_errors(t_est, p_est, t_true, p_true):
+    """ENU error (estimate minus truth) at each ground-truth time, estimate interpolated onto t_true."""
+    return np.column_stack([np.interp(t_true, t_est, p_est[:, i]) - p_true[:, i] for i in range(3)])
+
+
 def horizontal_errors(t_est, p_est, t_true, p_true):
-    """Horizontal error at each ground-truth time, estimate interpolated onto t_true."""
-    east = np.interp(t_true, t_est, p_est[:, 0]) - p_true[:, 0]
-    north = np.interp(t_true, t_est, p_est[:, 1]) - p_true[:, 1]
-    return np.hypot(east, north)
+    err = position_errors(t_est, p_est, t_true, p_true)
+    return np.hypot(err[:, 0], err[:, 1])
 
 
 def rmse(err):
@@ -39,59 +59,250 @@ def rmse(err):
 
 
 def position_error(t_est, p_est, t_true, p_true):
-    """Horizontal RMS error against ground truth."""
+    """Horizontal RMSE against ground truth."""
     return rmse(horizontal_errors(t_est, p_est, t_true, p_true))
 
 
-def make_cost_fn(data, candidate_log=None):
-    """The one cost function every optimizer calls.
+def gps_rmse(data):
+    """Raw GPS reference: whole-flight horizontal RMSE with no filter."""
+    return position_error(data["t_gps"], data["p_gps"], data["t_true"], data["p_true"])
 
-    cost_fn(theta) runs the filter up to T_SPLIT and returns the horizontal RMSE over
-    that part, or PENALTY if the run failed.
+
+# ---------------------------------------------------------------------------
+# Canonical fitness
+# ---------------------------------------------------------------------------
+def evaluate(data, theta):
+    """One complete EKF run for theta, with the fitness and the secondary diagnostics.
+
+    Returns a dict: rmse_h (the fitness, PENALTY on failure), rmse_v, rmse_3d, mean_nis,
+    ok, x_log and innovation_log.
     """
+    Q_c, R = theta_to_QR(theta)
     x0, P0 = init_state(data)
-    tune = data["t_true"] < T_SPLIT
-    t_true, p_true = data["t_true"][tune], data["p_true"][tune]
+    x_log, innovation_log, mean_nis, ok = run_ekf(data, Q_c, R, x0, P0)
+    out = {"ok": ok, "mean_nis": mean_nis, "x_log": x_log, "innovation_log": innovation_log,
+           "rmse_h": PENALTY, "rmse_v": np.nan, "rmse_3d": np.nan}
+    if ok:
+        err = position_errors(data["t_imu"][:len(x_log)], x_log, data["t_true"], data["p_true"])
+        rmse_h = rmse(np.hypot(err[:, 0], err[:, 1]))
+        if np.isfinite(rmse_h):
+            out.update(rmse_h=rmse_h, rmse_v=rmse(err[:, 2]), rmse_3d=rmse(np.linalg.norm(err, axis=1)))
+        else:
+            out["ok"] = False
+    return out
 
-    def cost_fn(theta):
-        Q_c, R = theta_to_QR(theta)
-        x_log, _, mean_nis, ok = run_ekf(data, Q_c, R, x0, P0, t_end=T_SPLIT)
-        cost = position_error(data["t_imu"][:len(x_log)], x_log, t_true, p_true) if ok else PENALTY
-        if not np.isfinite(cost):
-            cost = PENALTY
-        if candidate_log is not None:
-            candidate_log.append({"theta": np.array(theta, dtype=float), "cost": cost,
-                                  "mean_nis": mean_nis})
+
+def fitness(data, theta):
+    """The optimization objective J(theta): whole-flight horizontal RMSE in metres."""
+    return evaluate(data, theta)["rmse_h"]
+
+
+class BudgetExhausted(Exception):
+    """Raised when a FitnessTracker is called after max_evals evaluations."""
+
+
+_worker_data = None
+
+
+def _init_worker(data):
+    global _worker_data
+    _worker_data = data
+
+
+def _worker_fitness(theta):
+    return fitness(_worker_data, theta)
+
+
+class FitnessTracker:
+    """The one cost function every optimizer calls, with budget, history and timing.
+
+    tracker(theta) scores one candidate; tracker.evaluate_many(pop) scores a population,
+    in parallel when n_workers > 1, and records results in population order. One call
+    is one complete full-flight EKF run and counts as one evaluation. Once n_evals
+    reaches max_evals, tracker(theta) raises BudgetExhausted and evaluate_many scores
+    only the candidates that still fit in the budget.
+    """
+
+    def __init__(self, data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER):
+        self.data = data
+        self.max_evals = max_evals
+        self.lower, self.upper = np.asarray(lower, float), np.asarray(upper, float)
+        self.n_workers = n_workers
+        self._pool = None
+        self.history = []                   # one dict per evaluation
+        self.best_theta, self.best_cost = None, np.inf
+        self.evals_to_best = 0
+        self._t_start = None
+        self._t_last = None
+
+    # -- budget ---------------------------------------------------------------
+    @property
+    def n_evals(self):
+        return len(self.history)
+
+    @property
+    def remaining(self):
+        return np.inf if self.max_evals is None else self.max_evals - self.n_evals
+
+    @property
+    def exhausted(self):
+        return self.remaining <= 0
+
+    # -- evaluation -----------------------------------------------------------
+    def _record(self, theta, cost):
+        now = time.perf_counter()
+        if self._t_start is None:
+            self._t_start = now
+        self._t_last = now
+        if cost < self.best_cost:
+            self.best_cost, self.best_theta = float(cost), np.array(theta, dtype=float)
+            self.evals_to_best = self.n_evals + 1
+        self.history.append({"k": self.n_evals + 1, "fitness": float(cost),
+                             "best_so_far": self.best_cost, "elapsed": now - self._t_start,
+                             **dict(zip(THETA_NAMES, np.asarray(theta, dtype=float)))})
+
+    def __call__(self, theta):
+        if self.exhausted:
+            raise BudgetExhausted(f"max_evals = {self.max_evals} reached")
+        if self._t_start is None:
+            self._t_start = time.perf_counter()
+        theta = clip_theta(theta, self.lower, self.upper)
+        cost = fitness(self.data, theta)
+        self._record(theta, cost)
         return cost
 
-    return cost_fn
+    def evaluate_many(self, thetas):
+        """Score a population. Returns costs for the candidates scored, in order."""
+        thetas = [clip_theta(t, self.lower, self.upper) for t in np.atleast_2d(thetas)]
+        n = int(min(len(thetas), self.remaining))
+        thetas = thetas[:n]
+        if n == 0:
+            return np.array([])
+        if self._t_start is None:
+            self._t_start = time.perf_counter()
+        if self.n_workers > 1:
+            if self._pool is None:
+                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data,))
+            costs = self._pool.map(_worker_fitness, thetas)
+        else:
+            costs = [fitness(self.data, t) for t in thetas]
+        for theta, cost in zip(thetas, costs):
+            self._record(theta, cost)
+        return np.array(costs)
+
+    def close(self):
+        if self._pool is not None:
+            self._pool.close()
+            self._pool.join()
+            self._pool = None
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    # -- results --------------------------------------------------------------
+    @property
+    def t_total(self):
+        """Wall-clock seconds from the first evaluation starting to the last one ending."""
+        return 0.0 if self._t_start is None else self._t_last - self._t_start
+
+    @property
+    def t_eval(self):
+        return self.t_total / self.n_evals if self.n_evals else np.nan
+
+    def convergence(self):
+        """Best-so-far curve J*(k) as a DataFrame, one row per evaluation."""
+        return pd.DataFrame(self.history)
 
 
-def held_out_rmse(data, theta):
-    """Run the whole flight and score only t >= T_SPLIT. Returns (rmse_h, mean_nis, ok)."""
-    Q_c, R = theta_to_QR(theta)
-    x_log, _, mean_nis, ok = run_ekf(data, Q_c, R)
-    if not ok:
-        return PENALTY, mean_nis, False
-    held = data["t_true"] >= T_SPLIT
-    err = horizontal_errors(data["t_imu"][:len(x_log)], x_log, data["t_true"][held], data["p_true"][held])
-    return rmse(err), mean_nis, True
+def make_cost_fn(data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER):
+    """The canonical cost function for optimizers: a FitnessTracker on the clean flight."""
+    return FitnessTracker(data, max_evals=max_evals, n_workers=n_workers, lower=lower, upper=upper)
 
 
-def robustness(data, theta, datasets=None):
-    """Held-out RMSE of one theta on every robustness copy of the flight.
+def evals_to_converge(best_so_far, fraction=CONVERGENCE_FRACTION):
+    """First evaluation k at which the run has made `fraction` of its total improvement.
 
-    Returns a dict with per-dataset RMSE, their mean, and their standard deviation,
-    which is the robustness score (lower is more stable).
+    Improvement is measured from J*(1) to the final J*(N). A run that never improves
+    on its first evaluation converges at k = 1.
     """
-    datasets = robustness_datasets(data) if datasets is None else datasets
-    per_dataset = {name: held_out_rmse(d, theta)[0] for name, d in datasets.items()}
-    values = np.array(list(per_dataset.values()))
-    return {"per_dataset": per_dataset, "mean": float(values.mean()), "std": float(values.std())}
+    best = np.asarray(best_so_far, dtype=float)
+    if best.size == 0:
+        return 0
+    target = best[-1] + (1.0 - fraction) * (best[0] - best[-1])
+    return int(np.argmax(best <= target + 1e-12)) + 1
 
 
-def timed(fn, *args, **kwargs):
-    """Call fn and return (result, wall_time_seconds)."""
-    start = time.perf_counter()
-    out = fn(*args, **kwargs)
-    return out, time.perf_counter() - start
+# ---------------------------------------------------------------------------
+# Robustness: whole-flight RMSE degradation under predefined perturbations
+# ---------------------------------------------------------------------------
+def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS):
+    """Degradation of a fixed theta under each perturbation of the flight.
+
+    theta is never re-tuned here. For each perturbation:
+        delta     = RMSE_h,perturbed - RMSE_h,clean          (m, lower is better)
+        delta_pct = 100 * delta / RMSE_h,clean
+    Returns {"rmse_clean", "per_perturbation": {name: {rmse, delta, delta_pct}},
+             "delta_mean", "delta_max"}.
+    """
+    if rmse_clean is None:
+        rmse_clean = fitness(data, theta)
+    per = {}
+    for name, kwargs in perturbations.items():
+        value = fitness(perturb(data, **kwargs), theta)
+        delta = value - rmse_clean
+        per[name] = {"rmse": value, "delta": delta, "delta_pct": 100.0 * delta / rmse_clean}
+    deltas = np.array([p["delta"] for p in per.values()])
+    return {"rmse_clean": rmse_clean, "per_perturbation": per,
+            "delta_mean": float(deltas.mean()), "delta_max": float(deltas.max())}
+
+
+# ---------------------------------------------------------------------------
+# One row of results per run, same schema for the baseline and every optimizer
+# ---------------------------------------------------------------------------
+def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=None):
+    """Score the tracker's best theta on all four benchmark dimensions.
+
+    Accuracy (rmse_h), robustness (delta_rmse_*), convergence (evals_to_converge,
+    evals_to_best) and compute (n_evals, t_total, t_eval). Also reports the comparison
+    with the baseline EKF and with raw GPS separately.
+    """
+    theta = tracker.best_theta
+    result = evaluate(data, theta)
+    rob = robustness(data, theta, rmse_clean=result["rmse_h"])
+    rmse_gps = gps_rmse(data) if rmse_gps is None else rmse_gps
+    row = {"optimizer": optimizer, "seed": seed,
+           **dict(zip(THETA_NAMES, theta)),
+           "rmse_h": result["rmse_h"], "rmse_v": result["rmse_v"], "rmse_3d": result["rmse_3d"],
+           "mean_nis": result["mean_nis"], "nis_dof": NIS_DOF,
+           "rmse_gps": rmse_gps, "delta_vs_gps": result["rmse_h"] - rmse_gps}
+    if rmse_baseline is not None:
+        row["delta_vs_baseline"] = result["rmse_h"] - rmse_baseline
+        row["improvement_vs_baseline_pct"] = 100.0 * (rmse_baseline - result["rmse_h"]) / rmse_baseline
+    row["delta_rmse_mean"] = rob["delta_mean"]
+    row["delta_rmse_max"] = rob["delta_max"]
+    for name, p in rob["per_perturbation"].items():
+        row[f"rmse_{name}"] = p["rmse"]
+        row[f"delta_{name}"] = p["delta"]
+        row[f"delta_pct_{name}"] = p["delta_pct"]
+    best = tracker.convergence()["best_so_far"].to_numpy()
+    row.update({"evals_to_converge": evals_to_converge(best), "evals_to_best": tracker.evals_to_best,
+                "n_evals": tracker.n_evals, "max_evals": tracker.max_evals,
+                "t_total": tracker.t_total, "t_eval": tracker.t_eval})
+    return row, result
+
+
+def save_run(out_dir, row, tracker):
+    """Append one run to <out_dir>/runs.csv and write its convergence curve."""
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    tracker.convergence().to_csv(out_dir / f"convergence_seed{row['seed']}.csv", index=False)
+    runs_path = out_dir / "runs.csv"
+    runs = pd.DataFrame([row])
+    if runs_path.exists():
+        old = pd.read_csv(runs_path)
+        old = old[old["seed"] != row["seed"]]
+        runs = pd.concat([old, runs], ignore_index=True)
+    runs.to_csv(runs_path, index=False)
