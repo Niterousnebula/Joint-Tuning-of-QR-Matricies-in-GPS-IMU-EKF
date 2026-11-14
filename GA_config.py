@@ -4,11 +4,12 @@ These settings apply only to GA.py. The shared EKF, data loader and fitness func
 remain in the existing `ekf` package and are not modified by this file.
 """
 
-# Experiment budget
-POPULATION_SIZE = 20
-MAX_EVALS = 1000
-SEEDS = (0, 1, 2, 3, 4)
-N_WORKERS = 1
+# Experiment budget: 200 candidates x 50 generations = 10,000 evaluations per seed
+POPULATION_SIZE = 200
+MAX_EVALS = 10000
+SEEDS = (1, 2, 3, 4, 5)
+N_WORKERS = 1             # CPU backend only
+BACKEND = "gpu"           # "gpu": each generation is one batched EKF pass; "cpu": filterpy reference
 
 # GA operators
 TOURNAMENT_SIZE = 3
@@ -20,4 +21,4 @@ MUTATION_SIGMA_FRACTION = 0.10    # sigma as a fraction of each parameter's boun
 
 # Reproducibility and output
 RANDOM_SEED = 0
-OUTPUT_DIR = "results/GA"
+OUTPUT_DIR = "results/GA_gpu"

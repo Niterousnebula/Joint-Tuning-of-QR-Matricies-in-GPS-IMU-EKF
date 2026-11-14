@@ -3,6 +3,7 @@
 Run from the repository root:
     python GA.py
     python GA.py --max-evals 20 --seeds 0 --out results/GA_smoke
+    python GA.py --backend cpu        # filterpy reference instead of the GPU batch
 
 Only this file and GA_config.py are GA-specific. The shared EKF and objective are
 imported from the existing `ekf` package and are not modified.
@@ -134,7 +135,7 @@ def run_ga(data, tracker, seed=0, population_size=None):
 
 
 def run_experiment(max_evals=None, seeds=None, out_dir=None,
-                   population_size=None, n_workers=None):
+                   population_size=None, n_workers=None, backend=None, data=None):
     """Run configured independent seeds and save benchmark-compatible outputs."""
     max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
     seeds = tuple(cfg.SEEDS if seeds is None else seeds)
@@ -143,6 +144,7 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
         cfg.POPULATION_SIZE if population_size is None else population_size
     )
     n_workers = int(cfg.N_WORKERS if n_workers is None else n_workers)
+    backend = cfg.BACKEND if backend is None else backend
 
     if max_evals < 1:
         raise ValueError("max_evals must be at least 1")
@@ -151,8 +153,9 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
     if n_workers < 1:
         raise ValueError("n_workers must be at least 1")
 
-    print("Loading ETH flight data...")
-    data = ekf.load_data()
+    if data is None:
+        print("Loading ETH flight data...")
+        data = ekf.load_data()
 
     # Reference values are computed once per experiment, outside each GA budget.
     print("Computing baseline references...")
@@ -162,9 +165,9 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
     print(f"Raw GPS:               {rmse_gps:.4f} m")
 
     for seed in seeds:
-        print(f"\n=== GA | seed={seed} | budget={max_evals} ===")
+        print(f"\n=== GA | seed={seed} | budget={max_evals} | backend={backend} ===")
         tracker = ekf.make_cost_fn(
-            data, max_evals=max_evals, n_workers=n_workers
+            data, max_evals=max_evals, n_workers=n_workers, backend=backend
         )
         try:
             run_ga(data, tracker, seed=seed, population_size=population_size)
@@ -174,7 +177,8 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
             row, _ = ekf.run_summary(
                 data, tracker, "GA", seed,
                 rmse_gps=rmse_gps,
-                rmse_baseline=rmse_baseline
+                rmse_baseline=rmse_baseline,
+                population_size=population_size
             )
             ekf.save_run(out_dir, row, tracker)
 
@@ -182,7 +186,8 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
             print(f"Change vs baseline EKF:   {row['delta_vs_baseline']:+.4f} m")
             print(f"Change vs raw GPS:        {row['delta_vs_gps']:+.4f} m")
             print(f"Evaluations:              {row['n_evals']}/{max_evals}")
-            print(f"Time:                     {row['t_total']:.2f} s")
+            print(f"Time:                     {row['t_total']:.2f} s "
+                  f"(objective {row['t_objective']:.2f} s, {row['n_generations']} generations)")
             print("Best parameter vector (log10):")
             for name in ekf.THETA_NAMES:
                 print(f"  {name:<12} {row[name]: .6f}")
@@ -198,6 +203,7 @@ def main():
     parser.add_argument("--seeds", type=int, nargs="+", default=list(cfg.SEEDS))
     parser.add_argument("--population-size", type=int, default=cfg.POPULATION_SIZE)
     parser.add_argument("--workers", type=int, default=cfg.N_WORKERS)
+    parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
     parser.add_argument("--out", default=cfg.OUTPUT_DIR)
     args = parser.parse_args()
 
@@ -206,7 +212,8 @@ def main():
         seeds=args.seeds,
         out_dir=args.out,
         population_size=args.population_size,
-        n_workers=args.workers
+        n_workers=args.workers,
+        backend=args.backend
     )
 
 
