@@ -97,6 +97,14 @@ def fitness(data, theta):
     return evaluate(data, theta)["rmse_h"]
 
 
+METRIC_KEYS = ("rmse_h", "rmse_v", "rmse_3d", "mean_nis", "ok")
+
+
+def _metrics(data, theta):
+    result = evaluate(data, theta)
+    return tuple(result[k] for k in METRIC_KEYS)
+
+
 class BudgetExhausted(Exception):
     """Raised when a FitnessTracker is called after max_evals evaluations."""
 
@@ -113,25 +121,62 @@ def _worker_fitness(theta):
     return fitness(_worker_data, theta)
 
 
+def _worker_metrics(theta):
+    return _metrics(_worker_data, theta)
+
+
+def cpu_metrics_many(data, thetas, n_workers=1):
+    """Reference (filterpy) metrics for many candidates: dict of arrays, METRIC_KEYS."""
+    thetas = list(np.atleast_2d(np.asarray(thetas, dtype=float)))
+    if n_workers > 1:
+        with Pool(n_workers, initializer=_init_worker, initargs=(data,)) as pool:
+            rows = pool.map(_worker_metrics, thetas)
+    else:
+        rows = [_metrics(data, t) for t in thetas]
+    cols = list(zip(*rows))
+    return {k: np.array(c, dtype=bool if k == "ok" else float) for k, c in zip(METRIC_KEYS, cols)}
+
+
+BACKENDS = ("cpu", "gpu")
+
+
 class FitnessTracker:
     """The one cost function every optimizer calls, with budget, history and timing.
 
-    tracker(theta) scores one candidate; tracker.evaluate_many(pop) scores a population,
-    in parallel when n_workers > 1, and records results in population order. One call
-    is one complete full-flight EKF run and counts as one evaluation. Once n_evals
-    reaches max_evals, tracker(theta) raises BudgetExhausted and evaluate_many scores
-    only the candidates that still fit in the budget.
+    tracker(theta) scores one candidate; tracker.evaluate_many(pop) scores a population
+    and records results in population order. One candidate is one complete full-flight
+    EKF run and counts as one evaluation. Once n_evals reaches max_evals,
+    tracker(theta) raises BudgetExhausted and evaluate_many scores only the candidates
+    that still fit in the budget.
+
+    backend="cpu" runs the filterpy reference, in parallel processes when n_workers > 1.
+    backend="gpu" runs the whole population as one batched EKF on the GPU (ekf.gpu);
+    the objective is the same, only the execution differs.
+
+    Each call (one evaluate_many or one single evaluation) is one generation and is
+    numbered in the history. t_objective is the wall-clock time spent inside the
+    objective; t_total also includes the optimizer's own work between calls.
     """
 
-    def __init__(self, data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER):
+    def __init__(self, data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER, backend="cpu"):
+        if backend not in BACKENDS:
+            raise ValueError(f"backend must be one of {BACKENDS}")
         self.data = data
         self.max_evals = max_evals
         self.lower, self.upper = np.asarray(lower, float), np.asarray(upper, float)
         self.n_workers = n_workers
+        self.backend = backend
         self._pool = None
+        self._gpu = None
+        if backend == "gpu":
+            from .gpu import gpu_evaluator
+            self._gpu = gpu_evaluator(data)
         self.history = []                   # one dict per evaluation
         self.best_theta, self.best_cost = None, np.inf
         self.evals_to_best = 0
+        self.n_generations = 0              # objective calls (one per population)
+        self.n_objective_evals = 0          # candidates actually scored by the backend
+        self.t_objective = 0.0              # s spent inside the objective
         self._t_start = None
         self._t_last = None
 
@@ -157,9 +202,26 @@ class FitnessTracker:
         if cost < self.best_cost:
             self.best_cost, self.best_theta = float(cost), np.array(theta, dtype=float)
             self.evals_to_best = self.n_evals + 1
-        self.history.append({"k": self.n_evals + 1, "fitness": float(cost),
+        self.history.append({"k": self.n_evals + 1, "generation": self.n_generations,
+                             "fitness": float(cost),
                              "best_so_far": self.best_cost, "elapsed": now - self._t_start,
                              **dict(zip(THETA_NAMES, np.asarray(theta, dtype=float)))})
+
+    def _objective(self, thetas):
+        """Score a list of clipped candidates with the configured backend."""
+        t0 = time.perf_counter()
+        if self.backend == "gpu":
+            costs = list(self._gpu.fitness(np.asarray(thetas)))
+        elif self.n_workers > 1 and len(thetas) > 1:
+            if self._pool is None:
+                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data,))
+            costs = self._pool.map(_worker_fitness, thetas)
+        else:
+            costs = [fitness(self.data, t) for t in thetas]
+        self.t_objective += time.perf_counter() - t0
+        self.n_objective_evals += len(thetas)
+        self.n_generations += 1
+        return costs
 
     def __call__(self, theta):
         if self.exhausted:
@@ -167,7 +229,7 @@ class FitnessTracker:
         if self._t_start is None:
             self._t_start = time.perf_counter()
         theta = clip_theta(theta, self.lower, self.upper)
-        cost = fitness(self.data, theta)
+        cost = self._objective([theta])[0]
         self._record(theta, cost)
         return cost
 
@@ -180,12 +242,7 @@ class FitnessTracker:
             return np.array([])
         if self._t_start is None:
             self._t_start = time.perf_counter()
-        if self.n_workers > 1:
-            if self._pool is None:
-                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data,))
-            costs = self._pool.map(_worker_fitness, thetas)
-        else:
-            costs = [fitness(self.data, t) for t in thetas]
+        costs = self._objective(thetas)
         for theta, cost in zip(thetas, costs):
             self._record(theta, cost)
         return np.array(costs)
@@ -217,9 +274,10 @@ class FitnessTracker:
         return pd.DataFrame(self.history)
 
 
-def make_cost_fn(data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER):
+def make_cost_fn(data, max_evals=None, n_workers=1, lower=LOWER, upper=UPPER, backend="cpu"):
     """The canonical cost function for optimizers: a FitnessTracker on the clean flight."""
-    return FitnessTracker(data, max_evals=max_evals, n_workers=n_workers, lower=lower, upper=upper)
+    return FitnessTracker(data, max_evals=max_evals, n_workers=n_workers, lower=lower, upper=upper,
+                          backend=backend)
 
 
 def evals_to_converge(best_so_far, fraction=CONVERGENCE_FRACTION):
@@ -262,12 +320,18 @@ def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS):
 # ---------------------------------------------------------------------------
 # One row of results per run, same schema for the baseline and every optimizer
 # ---------------------------------------------------------------------------
-def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=None):
+def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=None,
+                population_size=None):
     """Score the tracker's best theta on all four benchmark dimensions.
 
     Accuracy (rmse_h), robustness (delta_rmse_*), convergence (evals_to_converge,
-    evals_to_best) and compute (n_evals, t_total, t_eval). Also reports the comparison
-    with the baseline EKF and with raw GPS separately.
+    evals_to_best) and compute (n_evals, t_total, t_eval, t_objective). Also reports the
+    comparison with the baseline EKF and with raw GPS separately.
+
+    The final theta is always re-scored with the filterpy reference on the CPU, so
+    rmse_h and the robustness numbers come from the reference filter whichever backend
+    drove the search. best_fitness_search is the value the search saw;
+    search_vs_final_diff is their difference (rounding only, for the GPU backend).
     """
     theta = tracker.best_theta
     result = evaluate(data, theta)
@@ -290,7 +354,15 @@ def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=Non
     best = tracker.convergence()["best_so_far"].to_numpy()
     row.update({"evals_to_converge": evals_to_converge(best), "evals_to_best": tracker.evals_to_best,
                 "n_evals": tracker.n_evals, "max_evals": tracker.max_evals,
-                "t_total": tracker.t_total, "t_eval": tracker.t_eval})
+                "t_total": tracker.t_total, "t_eval": tracker.t_eval,
+                "backend": tracker.backend, "population_size": population_size,
+                "n_generations": tracker.n_generations,
+                "n_objective_evals": tracker.n_objective_evals,
+                "t_objective": tracker.t_objective,
+                "t_objective_per_eval": (tracker.t_objective / tracker.n_objective_evals
+                                         if tracker.n_objective_evals else np.nan),
+                "best_fitness_search": tracker.best_cost,
+                "search_vs_final_diff": result["rmse_h"] - tracker.best_cost})
     return row, result
 
 
