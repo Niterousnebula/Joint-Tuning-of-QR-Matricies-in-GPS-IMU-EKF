@@ -1,12 +1,14 @@
 """Configuration for Differential Evolution (DE). Shared EKF files are untouched."""
 
-POPULATION_SIZE = 20
-MAX_EVALS = 1000
-SEEDS = (0, 1, 2, 3, 4)
-N_WORKERS = 1
+# 200 candidates: initial population + 49 trial generations = 10,000 evaluations per seed
+POPULATION_SIZE = 200
+MAX_EVALS = 10000
+SEEDS = (1, 2, 3, 4, 5)
+N_WORKERS = 1              # CPU backend only
+BACKEND = "gpu"            # "gpu": each generation is one batched EKF pass; "cpu": filterpy reference
 
 # Canonical DE/rand/1/bin controls
 DIFFERENTIAL_WEIGHT = 0.7  # mutation scale F
 CROSSOVER_RATE = 0.9       # binomial crossover probability CR
 
-OUTPUT_DIR = "results/DE"
+OUTPUT_DIR = "results/DE_gpu"
