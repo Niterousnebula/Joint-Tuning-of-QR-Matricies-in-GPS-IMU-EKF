@@ -10,25 +10,29 @@ We tune the process noise **Q** and the measurement noise **R** together, offlin
 - Differential Evolution (DE)
 - Grey Wolf Optimizer (GWO)
 
+**Methodology.** Q/R optimization is performed offline using the complete recorded flight. The primary optimization objective is whole-flight horizontal position RMSE. Robustness is evaluated separately by applying predefined sensor perturbations and measuring whole-flight RMSE degradation.
+
+The experiment evaluates the ability of the optimization algorithms to identify Q/R parameters for the given ETH Zurich flight under a fixed computational budget. It does not test generalization to unseen flights.
+
 ## Branches
 
 | Branch | Holds |
 |---|---|
-| `main` | Data, the EKF, the shared cost function and this README. Everyone uses it unchanged |
+| `main` | Data, the EKF, the canonical fitness function and this README. Everyone uses it unchanged |
 | `ga`, `pso`, `de`, `gwo` | One optimizer each: its code and its config file, built on `main` |
-| `results` | Runs of every optimizer against the baseline, and the 4D response graph |
+| `results` | Runs of every optimizer against the baseline, and the evaluation figures |
 
-Changes to the data, the filter or the cost function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
+Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
 
 ## Layout
 
 | Path | Purpose |
 |---|---|
 | `data/` | The cleaned ETH Zurich flight. Do not clean it again |
-| `ekf/data.py` | `load_data`, plus `perturb` and `ROBUSTNESS_DATASETS` for the robustness copies of the flight |
+| `ekf/data.py` | `load_data`, plus `perturb` and `PERTURBATIONS` for the robustness tests |
 | `ekf/filter.py` | The EKF, built on `filterpy.kalman.ExtendedKalmanFilter` |
-| `ekf/tuning.py` | Decision vector, bounds, `theta_to_QR`, `make_cost_fn` and the scoring functions |
-| `run_baseline.py` | Runs `THETA0` and writes `results/baseline/` |
+| `ekf/tuning.py` | Decision vector, bounds, `theta_to_QR`, the canonical `fitness`, `FitnessTracker`, `robustness` and the result helpers |
+| `run_baseline.py` | Evaluates `THETA0` through the same fitness and writes `results/baseline/` |
 
 ## Quick start
 
@@ -38,31 +42,48 @@ python run_baseline.py
 ```
 
 ```python
+import numpy as np
 import ekf
 
 data = ekf.load_data()
-Q_c, R = ekf.theta_to_QR(ekf.THETA0)
-x_log, innovation_log, mean_nis, ok = ekf.run_ekf(data, Q_c, R)
-rmse_h = ekf.position_error(data["t_imu"], x_log, data["t_true"], data["p_true"])
+J = ekf.fitness(data, ekf.THETA0)                 # whole-flight horizontal RMSE, metres
 
-cost_fn = ekf.make_cost_fn(data)      # what every optimizer calls
-cost = cost_fn(ekf.THETA0)
+# What every optimizer calls: same fitness, plus budget, best-so-far history and timing
+seed = 0
+cost_fn = ekf.make_cost_fn(data, max_evals=1000, n_workers=8)
+population = np.random.default_rng(seed).uniform(ekf.LOWER, ekf.UPPER, (20, 7))
+costs = cost_fn.evaluate_many(population)         # or cost_fn(theta) for one candidate
+# ... the optimizer's own loop, until cost_fn.exhausted ...
+row, _ = ekf.run_summary(data, cost_fn, "GA", seed, rmse_baseline=J)
+ekf.save_run("results/GA", row, cost_fn)          # runs.csv + convergence_seed<seed>.csv
+cost_fn.close()
 ```
+
+With `n_workers > 1` the script must run its optimizer under `if __name__ == "__main__":`, which Windows multiprocessing requires.
 
 ## Reference results
 
-Horizontal RMS error against ground truth (`python run_baseline.py`):
+Whole-flight horizontal RMSE against ground truth (`python run_baseline.py`):
 
-| Source | Whole flight | Tuning part (`t < T_SPLIT`) | Held-out part | Mean NIS |
-|---|---|---|---|---|
-| Raw GPS, no filter | 3.604 m | 3.812 m | 3.382 m | – |
-| EKF, `THETA0` | 3.775 m | 3.939 m | 3.603 m | 0.97 |
+| Source | RMSE_h | vs raw GPS | RMSE_v | RMSE_3D | Mean NIS (expected 6) |
+|---|---|---|---|---|---|
+| Raw GPS, no filter | 3.604 m | – | – | – | – |
+| EKF, `THETA0` | 3.775 m | +0.171 m | 5.802 m | 6.922 m | 0.97 |
 
-Robustness of `THETA0`, held-out RMSE on each copy of the flight: clean 3.603 m, GPS noise 1 m 3.608 m, GPS noise 2 m 3.671 m, GPS velocity noise 3.607 m, IMU noise 3.602 m, half the GPS fixes dropped 3.661 m. Their standard deviation, the robustness score, is 0.029 m.
+The baseline EKF is **worse than raw GPS** on whole-flight horizontal RMSE. Most of the GPS error against ground truth is a slowly varying bias that a GPS–IMU filter cannot see, so an optimizer can improve on the baseline EKF and still not beat raw GPS. Results always report both comparisons. A mean NIS of 0.97 against the expected 6 means the baseline is underconfident: Q or R is larger than the innovations support.
 
-One full-flight run takes about 6 s and a tuning run (half the flight) about 3 s on one core.
+Robustness of `THETA0`, $\Delta\text{RMSE}_h$ against its clean 3.775 m:
 
-Most of the GPS error against ground truth is slowly varying bias, which a GPS–IMU filter cannot see. The filter can therefore only beat raw GPS by a small margin on this flight, and the benchmark compares optimizers against `THETA0` rather than against GPS.
+| Perturbation | RMSE_h | ΔRMSE_h | ΔRMSE_h % |
+|---|---|---|---|
+| `gps_noise_1m` | 3.781 m | +0.006 m | +0.16 % |
+| `gps_noise_2m` | 3.824 m | +0.049 m | +1.30 % |
+| `gps_vel_noise` | 3.782 m | +0.007 m | +0.19 % |
+| `imu_noise` | 3.776 m | +0.000 m | +0.01 % |
+| `gps_drop_50` | 3.822 m | +0.047 m | +1.24 % |
+| Mean / max | | +0.022 m / +0.049 m | |
+
+One fitness evaluation, a full-flight run, takes about 6–8 s on one core of the machine used here.
 
 ## The EKF
 
@@ -166,9 +187,11 @@ filterpy computes $y = z - h(\hat x^-)$, $S = H P^- H^\top + R$, $K = P^- H^\top
 
 ### 4. Score
 
-Estimated positions are interpolated onto the ground-truth times, and
+Estimated positions are interpolated onto the ground-truth times over the **complete flight**, and
 
-$$\text{RMSE}_h = \sqrt{\frac{1}{N}\sum_i \big[(p_{e,i} - p^{true}_{e,i})^2 + (p_{n,i} - p^{true}_{n,i})^2\big]}$$
+$$\text{RMSE}_h = \sqrt{\frac{1}{N}\sum_{i=1}^{N} \big[(e_i - \hat e_i)^2 + (n_i - \hat n_i)^2\big]}$$
+
+where $N$ is every ground-truth sample in the flight. Vertical RMSE, 3D RMSE and mean NIS are reported as secondary diagnostics.
 
 ## Q/R tuning
 
@@ -188,38 +211,124 @@ Seven values, each $\log_{10}$ of a variance or noise density:
 
 Where `THETA0` comes from: the accelerometer norm has a standard deviation of 4.1 m/s² at 10 Hz (vibration and aliasing), giving $4.1^2 \times 0.1 \approx 1.6$; gyroscope noise of about 0.1 rad/s gives $10^{-3}$; GPS position noise of 3 m and 6 m; GPS velocity variance of about 1 (m/s)², as logged in `s_variance`. The two bias values are order-of-magnitude choices. `LOWER_TIGHT` and `UPPER_TIGHT` halve the bounds. In 48 random points inside the full bounds, no run diverged.
 
-### Cost function
+### Canonical fitness
 
-`make_cost_fn(data)` returns `cost_fn(theta)`, which runs the filter up to `T_SPLIT = 1364.04 s` and returns $\text{RMSE}_h$ over that part, or `PENALTY = 1000` m if the run fails. The second half of the flight is held out and never seen by the optimizers.
+There is one fitness function, `ekf.fitness(data, theta)` in `ekf/tuning.py`:
 
-### Benchmark metrics
+```text
+candidate theta
+      ↓
+theta_to_QR(theta)  →  Q_c, R
+      ↓
+complete 16-state EKF over the whole flight
+      ↓
+complete estimated trajectory vs complete ground truth
+      ↓
+whole-flight horizontal RMSE
+      ↓
+fitness J(theta)
+```
 
-The `results` branch plots every optimizer run against the baseline on four axes:
+$$J(\theta) = \text{RMSE}_{h,\text{whole}}$$
 
-| Axis | Measured as |
-|---|---|
-| RMSE | Held-out $\text{RMSE}_h$ of the tuned filter |
-| Robustness | `ekf.robustness(data, theta)["std"]`: standard deviation of held-out $\text{RMSE}_h$ over the datasets in `ROBUSTNESS_DATASETS`. Lower is more stable |
-| Compute | `evals_to_best`: filter runs until the best result was found |
-| Time | `wall_time` of one optimizer run, in seconds, on one machine |
+A run that diverges scores `PENALTY = 1000` m. The baseline `THETA0` and every optimizer (GA, PSO, DE, GWO and any later one) are scored by this function. Optimizers do not reimplement it; they call it through `FitnessTracker` (`ekf.make_cost_fn`), which:
 
-`ROBUSTNESS_DATASETS` (in `ekf/data.py`) are copies of the flight with ground truth unchanged. Each copy uses its own fixed seed, so every optimizer sees the same noise:
+- counts evaluations and stops at `max_evals` (`BudgetExhausted` for single calls; `evaluate_many` scores only what still fits),
+- clips candidates to the bounds,
+- records $J_k$, the best-so-far $J^*(k)$ and elapsed time after every evaluation,
+- can score a population in parallel (`n_workers`), recording results in population order, so the count and the curve are the same as in a serial run.
+
+The perturbed copies of the flight are never used inside the fitness.
+
+### Experimental structure
+
+```text
+Original clean flight
+        │
+        ├── Q/R optimization ── whole-flight horizontal RMSE (fitness)
+        │
+        └── Robustness evaluation of the tuned theta (no re-tuning)
+                ├── GPS position noise (1 m, 2 m)
+                ├── GPS velocity noise
+                ├── IMU noise
+                └── GPS dropout
+```
+
+### Rules for a fair comparison
+
+- Same parameterization (`THETA_NAMES`), same bounds (`LOWER`, `UPPER`), same fitness (`make_cost_fn`) and same budget (`max_evals`) for every optimizer.
+- Starting population: `np.random.default_rng(seed).uniform(lower, upper, (n_pop, n_dim))`; `THETA0` is not included.
+- Budget: every fitness call counts, including the first population. Stop as soon as `n_evals` reaches `max_evals`.
+- Seeds are fixed and recorded, so every run can be reproduced.
+- Each run is written with `run_summary` and `save_run`, so every optimizer produces the same files: `results/<NAME>/runs.csv` (one row per seed) and `results/<NAME>/convergence_seed<seed>.csv`.
+- Each optimizer branch puts its settings (population size, budget, seeds and algorithm-specific values) in its own config file.
+
+## Evaluation framework
+
+Optimizers are compared on four dimensions, always in this order:
+
+**Accuracy → Robustness → Convergence efficiency → Computational cost**
+
+| # | Dimension | Question | Primary metric | Column in `runs.csv` |
+|---|---|---|---|---|
+| 1 | Accuracy | Is the final solution good? | $\text{RMSE}_{h,\text{whole}}$ of the best theta | `rmse_h` |
+| 2 | Robustness | Does it stay good under perturbations? | $\Delta\text{RMSE}_h$ | `delta_rmse_mean`, `delta_<perturbation>` |
+| 3 | Convergence efficiency | How quickly was a good solution found? | $J^*(k)$ against $k$ | `convergence_seed<seed>.csv`; summary `evals_to_converge` |
+| 4 | Computational cost | What effort was needed? | $N_{eval}$ | `n_evals`; secondary `t_total`, `t_eval` |
+
+### 1. Accuracy
+
+$\text{RMSE}_{h,\text{whole}}$ is the primary metric. Two comparisons are always reported separately:
+
+$$\Delta\text{RMSE}_{EKF} = \text{RMSE}_{optimized} - \text{RMSE}_{baseline} \qquad (\texttt{delta\_vs\_baseline}, \texttt{improvement\_vs\_baseline\_pct})$$
+
+$$\Delta\text{RMSE}_{GPS} = \text{RMSE}_{optimized} - \text{RMSE}_{GPS} \qquad (\texttt{delta\_vs\_gps})$$
+
+An optimizer that improves on the baseline EKF but has $\Delta\text{RMSE}_{GPS} > 0$ is still worse than raw GPS and is not described as improving overall navigation. Secondary diagnostics: `rmse_v`, `rmse_3d`, `mean_nis`.
+
+**NIS.** The GPS measurement is $z = [p_x, p_y, p_z, v_x, v_y, v_z]^\top$, so $m = 6$ (`NIS_DOF`). A correctly specified filter has $E[\text{NIS}] \approx 6$. Values well below 6 mean the filter is underconfident and values well above 6 mean it is overconfident. A filter that copies GPS can have low RMSE with NIS far from 6, so NIS is read alongside RMSE.
+
+### 2. Robustness
+
+The tuned theta is held fixed. For each perturbation in `PERTURBATIONS` the complete flight is run again, and
+
+$$\Delta\text{RMSE}_h = \text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}, \qquad \Delta\text{RMSE}_{h,\%} = 100\,\frac{\text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}}{\text{RMSE}_{h,\text{clean}}}$$
+
+Smaller is better; $\approx 0$ means little degradation. Both RMSE values cover the entire flight. `delta_rmse_mean` (mean over the perturbations) is the summary score and `delta_rmse_max` is the worst case.
 
 | Name | Change |
 |---|---|
-| `clean` | None |
 | `gps_noise_1m`, `gps_noise_2m` | White noise of 1 m and 2 m added to GPS position |
 | `gps_vel_noise` | White noise of 0.3 m/s added to GPS velocity |
 | `imu_noise` | 0.5 m/s² added to the accelerometer and 1 °/s to the gyroscope |
 | `gps_drop_50` | Half the GPS fixes removed at random |
 
-### Rules for a fair comparison
+Each perturbation uses its own fixed seed, so every optimizer sees the same noise. These are stress tests of one flight, not validation on an independent flight.
 
-- Starting population: `np.random.default_rng(seed).uniform(lower, upper, (n_pop, n_dim))`; `THETA0` is not included.
-- Budget: every `cost_fn` call counts, including the first population; stop as soon as `n_evals` reaches `max_evals`.
-- Bounds: values outside them are clipped to the nearest bound.
-- Scoring: always `ekf.make_cost_fn(data)`.
-- Each optimizer branch puts its settings (population size, budget, seeds and algorithm-specific values) in its own config file.
+### 3. Convergence efficiency
+
+For each run, the best-so-far fitness after every evaluation is recorded:
+
+$$J^*(k) = \min_{i \le k} J_i$$
+
+The convergence curve, best-so-far whole-flight RMSE against evaluation count $k$, is the primary representation and is plotted for every optimizer and seed. As a single number, `evals_to_converge` is the first $k$ at which the run has made 99 % of its total improvement from $J^*(1)$ to $J^*(N)$; `evals_to_best` is the $k$ of the final best. Two optimizers with the same final RMSE can differ widely here.
+
+### 4. Computational cost
+
+The primary, hardware-independent measure is $N_{eval}$:
+
+> One evaluation = one complete execution of the 16-state EKF over the full flight for one candidate Q/R parameter set, followed by calculation of the fitness.
+
+Every optimizer gets the same `max_evals`, so $N_{eval}$ is the same for all of them by design. Secondary, hardware-dependent measures: $T_{total}$ (`t_total`, wall-clock seconds for the run) and $T_{eval} = T_{total}/N_{eval}$ (`t_eval`). Wall-clock values are only comparable when measured on one machine with the same `n_workers`.
+
+### Result table
+
+Every run produces a row with these values, so the comparison can be laid out as:
+
+| Optimizer | Whole-flight RMSE_h | vs baseline | vs GPS | Robustness ΔRMSE_h | Evals to converge | N_eval | T_total | T_eval |
+|---|---|---|---|---|---|---|---|---|
+| Baseline | 3.775 m | – | +0.171 m | +0.022 m | – | 1 | – | – |
+| GA, PSO, DE, GWO | from `results/<NAME>/runs.csv` | | | | | | | |
 
 ## Results (this branch)
 
@@ -269,9 +378,10 @@ Files hold one ETH Zurich flight of about 2,714 s. They keep the original datase
 
 ## Known limits
 
-1. **Sensor-log breaks** at t = 774.49, 1772.16 and 2616.03 s, where GPS jumps by 4–13 m (`is_jump`). The filter has no outlier gate and takes a few seconds to recover.
-2. **Ground-truth timing** is a fit, good to about ±0.3 s over most of the flight; the last 102 rows (`stretch` 3) are less certain.
-3. **GPS bias.** Ground truth differs from GPS by a slowly varying offset that no GPS–IMU filter can observe, which caps how far any tuning can get below raw GPS.
-4. **RMSE alone can favour following GPS.** Very large process noise makes the filter copy GPS. Check `mean_nis` (consistent ≈ 6) when reading results.
-5. **10 Hz IMU.** The IMU log is sparse and heavily aliased, so the accelerometer noise density is large and the prediction is weak between fixes.
-6. **Single flight.** Tuning, held-out and robustness datasets all come from the same flight.
+1. **Single flight.** Calibration uses the complete ETH Zurich flight and there is no independent flight for validation. Results show how well each optimizer calibrates Q/R for this flight under a fixed budget, not how the tuned values generalize to other flights. The perturbation tests are not a substitute for an independent flight.
+2. **GPS bias.** Ground truth differs from GPS by a slowly varying offset that no GPS–IMU filter can observe, which caps how far any tuning can get below raw GPS.
+3. **RMSE alone can favour following GPS.** Very large process noise makes the filter copy GPS. Read `mean_nis` (consistent ≈ 6) alongside RMSE.
+4. **Sensor-log breaks** at t = 774.49, 1772.16 and 2616.03 s, where GPS jumps by 4–13 m (`is_jump`). The filter has no outlier gate and takes a few seconds to recover.
+5. **Ground-truth timing** is a fit, good to about ±0.3 s over most of the flight; the last 102 rows (`stretch` 3) are less certain.
+6. **10 Hz IMU.** The IMU log is sparse and heavily aliased, so the accelerometer noise density is large and the prediction is weak between fixes.
+7. **Wall-clock time** depends on the machine and on `n_workers`; compare optimizers on $N_{eval}$ and on convergence curves first.
