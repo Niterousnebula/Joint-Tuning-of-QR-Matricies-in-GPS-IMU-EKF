@@ -2,6 +2,7 @@
 
     python PSO.py                         # every seed in PSO_config.SEEDS
     python PSO.py --seeds 0 --max-evals 40 --swarm 8   # quick check
+    python PSO.py --backend cpu           # filterpy reference instead of the GPU batch
 
 Global-best PSO over the 7-D log10 decision vector inside [ekf.LOWER, ekf.UPPER].
 Every candidate is scored by the canonical fitness through ekf.make_cost_fn, which
@@ -87,25 +88,41 @@ def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE, log=None):
     return g_best, g_cost
 
 
-def main(seeds, max_evals, swarm_size, n_workers, out_dir):
-    data = ekf.load_data()
+def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=None,
+                   n_workers=None, backend=None, data=None):
+    """Run every seed and save benchmark-compatible outputs (same interface as GA, DE, GWO)."""
+    max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
+    seeds = tuple(cfg.SEEDS if seeds is None else seeds)
+    out_dir = cfg.OUTPUT_DIR if out_dir is None else out_dir
+    swarm_size = int(cfg.SWARM_SIZE if population_size is None else population_size)
+    n_workers = int(cfg.N_WORKERS if n_workers is None else n_workers)
+    backend = cfg.BACKEND if backend is None else backend
+
+    if data is None:
+        data = ekf.load_data()
     rmse_gps = ekf.gps_rmse(data)
     rmse_baseline = ekf.fitness(data, ekf.THETA0)   # reference only, not part of the budget
     print(f"Raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m", flush=True)
 
     for seed in seeds:
+        print(f"\n=== PSO | seed={seed} | budget={max_evals} | backend={backend} ===", flush=True)
         rng = np.random.default_rng(cfg.RANDOM_SEED + seed)
         log = RunLog(Path(out_dir) / cfg.LOG_FILE, seed)
-        with ekf.make_cost_fn(data, max_evals=max_evals, n_workers=n_workers) as cost_fn:
+        with ekf.make_cost_fn(data, max_evals=max_evals, n_workers=n_workers, backend=backend) as cost_fn:
             best_theta, best_cost = pso(cost_fn, rng, swarm_size, log)
             row, _ = ekf.run_summary(data, cost_fn, "PSO", seed,
-                                     rmse_gps=rmse_gps, rmse_baseline=rmse_baseline)
+                                     rmse_gps=rmse_gps, rmse_baseline=rmse_baseline,
+                                     population_size=swarm_size)
             ekf.save_run(out_dir, row, cost_fn)
         print(f"seed {seed}: RMSE_h {row['rmse_h']:.3f} m "
               f"(vs baseline {row['delta_vs_baseline']:+.3f} m, vs GPS {row['delta_vs_gps']:+.3f} m), "
               f"robustness mean {row['delta_rmse_mean']:+.3f} m, "
               f"converged at k = {row['evals_to_converge']}, N_eval {row['n_evals']}, "
-              f"T_total {row['t_total']:.0f} s", flush=True)
+              f"T_total {row['t_total']:.0f} s (objective {row['t_objective']:.0f} s)", flush=True)
+
+
+def main(seeds, max_evals, swarm_size, n_workers, out_dir, backend=None):
+    run_experiment(max_evals, seeds, out_dir, swarm_size, n_workers, backend)
 
 
 if __name__ == "__main__":
@@ -114,6 +131,7 @@ if __name__ == "__main__":
     parser.add_argument("--max-evals", type=int, default=cfg.MAX_EVALS)
     parser.add_argument("--swarm", type=int, default=cfg.SWARM_SIZE)
     parser.add_argument("--workers", type=int, default=cfg.N_WORKERS)
+    parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
     parser.add_argument("--out", default=cfg.OUTPUT_DIR)
     a = parser.parse_args()
-    main(a.seeds, a.max_evals, a.swarm, a.workers, a.out)
+    main(a.seeds, a.max_evals, a.swarm, a.workers, a.out, a.backend)
