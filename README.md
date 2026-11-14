@@ -30,8 +30,9 @@ Changes to the data, the filter or the fitness function go into `main` first and
 
 | Setting | Value |
 |---|---|
-| Swarm size × iterations | 20 × 50 = 1000 evaluations per seed |
-| Seeds | 0, 1, 2, 3, 4 (5000 evaluations in total) |
+| Swarm size × iterations | 200 × 50 = 10,000 evaluations per seed |
+| Seeds | 1, 2, 3, 4, 5 (50,000 evaluations in total) |
+| Objective backend | GPU: each iteration's 200 particles are one batched EKF pass (`ekf/gpu.py`) |
 | Inertia w | linear from 0.9 to 0.4 |
 | c1, c2 | 1.49445, 1.49445 |
 | Velocity clamp | 20 % of each parameter's bound range |
@@ -40,12 +41,12 @@ Changes to the data, the filter or the fitness function go into `main` first and
 
 Every candidate is scored through `ekf.make_cost_fn`, so the budget, the convergence curve and the timing match the other optimizers.
 
-While it runs, every evaluation is appended to `results/PSO/pso_log.csv` as soon as its iteration is scored. Each row holds `seed, iteration, particle, k, fitness, best_so_far, elapsed` and the 7 θ values, so you can open the file mid-run to watch progress. Rerunning a seed replaces that seed's rows. A progress line is also printed after each iteration.
+While it runs, every evaluation is appended to `results/PSO_gpu/pso_log.csv` as soon as its iteration is scored. Each row holds `seed, iteration, particle, k, generation, fitness, best_so_far, elapsed` and the 7 θ values, so you can open the file mid-run to watch progress. Rerunning a seed replaces that seed's rows. A progress line is also printed after each iteration. `results/PSO/` holds the earlier 20 × 50 CPU runs (seeds 0–4) and is not overwritten.
 
 ```bash
-python PSO.py                                        # all seeds -> results/PSO/
-python PSO.py --seeds 0 --max-evals 40 --swarm 8     # quick check
-python PSO.py --workers 4                            # parallel fitness evaluations
+python PSO.py                                        # all seeds -> results/PSO_gpu/
+python PSO.py --seeds 1 --max-evals 40 --swarm 8     # quick check
+python PSO.py --backend cpu --workers 10             # filterpy reference on the CPU
 ```
 
 ## Layout
