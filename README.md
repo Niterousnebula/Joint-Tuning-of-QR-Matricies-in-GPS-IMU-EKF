@@ -20,11 +20,11 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 |---|---|
 | `main` | Data, the EKF, the canonical fitness function and this README. Everyone uses it unchanged |
 | `ga`, `pso`, `de`, `gwo` | One optimizer each: its code and its config file, built on `main` |
-| `results` | Runs of every optimizer against the baseline, and the evaluation figures |
+| `results` | All four optimizers merged in, `run_benchmark.py`, runs of every optimizer against the baseline, and the evaluation figures |
 
 Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
 
-## PSO (this branch)
+## PSO settings (from the `pso` branch)
 
 `PSO.py` runs global-best Particle Swarm Optimization on the 7-D log10 decision vector within `[LOWER, UPPER]`. Its settings are in `PSO_config.py`.
 
@@ -403,6 +403,41 @@ python plot_response.py
 ```
 
 `plot_response.py` needs `matplotlib`, and `plotly` for the interactive graph.
+
+### GPU benchmark (`run_benchmark.py`)
+
+This branch holds all four optimizers, merged from `ga`, `pso`, `de` and `gwo`. `run_benchmark.py` runs them one after another on the GPU objective (`ekf/gpu.py`) under one fixed budget:
+
+| Setting | Value |
+|---|---|
+| Population | 200 for every optimizer |
+| Evaluations per seed | 10,000 (50 generations of 200 candidates; DE: initial population plus 49 trial generations) |
+| Seeds | 1, 2, 3, 4, 5 |
+| Order | GA (all seeds, saved) → PSO → DE → GWO; one optimizer at a time, in one process |
+
+```bash
+python run_benchmark.py                   # full benchmark -> results/benchmark_<stamp>/
+python run_benchmark.py --validate-only   # only the CPU vs GPU check
+python run_benchmark.py --smoke           # tiny budget, tests the pipeline end to end
+python plot_response.py --root results/benchmark_<stamp>   # rebuild table and figures
+```
+
+Each run gets its own folder, `results/benchmark_<YYYYmmdd_HHMMSS>/`, and an existing folder is never reused, so earlier runs are never overwritten:
+
+| Path | Holds |
+|---|---|
+| `manifest.json` | Budget, every optimizer's config, git commit, Python, PyTorch, CUDA and GPU, start and finish times, validation summary, per-seed accounting checks |
+| `benchmark.log` | Everything printed during the run |
+| `validation/` | `validation_table.csv` (one row per candidate: CPU and GPU RMSE_h, RMSE_v, RMSE_3D, mean NIS, ok, and differences) and `validation_summary.json` |
+| `baseline/` | `THETA0` through the same fitness |
+| `GA/`, `PSO/`, `DE/`, `GWO/` | `runs.csv` (one row per seed), `convergence_seed<s>.csv` (one row per evaluation, with `generation`), and the PSO, DE and GWO live logs |
+| `results_table.*`, `convergence.png`, `robustness.png`, `response_4d.*` | Written by `plot_response.py --root <folder>` at the end |
+
+Before any optimizer runs, the benchmark checks the GPU objective. GA's first generation for seed 1 (200 candidates) goes through the real path (optimizer → `FitnessTracker` → batched GPU EKF), and the same candidates are then scored by the filterpy reference on the CPU. The benchmark stops if any fitness, RMSE_v or RMSE_3D difference exceeds `TOL_RMSE = 1e-6` m, if any mean NIS differs by more than `TOL_NIS_REL = 1e-6` (relative), or if a candidate fails on one backend but not the other.
+
+After each optimizer, every seed is checked to have `n_evals` (evaluations recorded), `n_objective_evals` (candidates the GPU actually scored) and convergence-curve rows all equal to 10,000, so the evaluation count is measured, not inferred from the number of generations. The final RMSE, robustness and NIS in `runs.csv` come from the filterpy reference re-scoring the best θ (see "GPU batched evaluation"). `t_total`, `t_objective` and `n_generations` give the compute cost.
+
+The benchmark refuses to start unless the `results` branch is checked out (`--allow-any-branch` overrides this) and all four configs set population 200, 10,000 evaluations, seeds 1–5 and `BACKEND = "gpu"`. A lock file, `results/.benchmark.lock`, stops a second benchmark from sharing the GPU.
 
 ## Data
 

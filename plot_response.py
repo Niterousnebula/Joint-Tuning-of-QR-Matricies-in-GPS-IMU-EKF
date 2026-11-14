@@ -1,15 +1,17 @@
 """Benchmark figures and table: accuracy -> robustness -> convergence efficiency -> compute.
 
-Reads results/baseline/runs.csv and, when present, results/<GA|PSO|DE|GWO>/runs.csv and
-convergence_seed<seed>.csv, all written by ekf.save_run. Writes to results/:
+Reads <root>/baseline/runs.csv and, when present, <root>/<GA|PSO|DE|GWO>/runs.csv and
+convergence_seed<seed>.csv, all written by ekf.save_run. Writes to <root>/:
 
     results_table.csv, results_table.md   per-optimizer mean (and std) of every dimension
     convergence.png                       best-so-far whole-flight RMSE vs evaluations
     robustness.png                        clean -> perturbed RMSE and Delta RMSE per perturbation
     response_4d.png, response_4d.html     RMSE x robustness x convergence, coloured by compute
 
-    python plot_response.py
+    python plot_response.py                                    # root = results/
+    python plot_response.py --root results/benchmark_<stamp>   # one benchmark run
 """
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -36,8 +38,12 @@ TABLE = [("rmse_h", "Whole-flight RMSE_h (m)"),
          ("evals_to_converge", "Evals to 99 % of improvement"),
          ("evals_to_best", "Evals to best"),
          ("n_evals", "N_eval"),
+         ("population_size", "Population"),
+         ("n_generations", "Generations"),
          ("t_total", "T_total (s)"),
-         ("t_eval", "T_eval (s)")]
+         ("t_eval", "T_eval (s)"),
+         ("t_objective", "T_objective (s)"),
+         ("t_objective_per_eval", "T_objective per eval (s)")]
 
 
 def load():
@@ -52,7 +58,7 @@ def load():
         curves[name] = {int(s): pd.read_csv(folder / f"convergence_seed{s}.csv")
                         for s in df["seed"] if (folder / f"convergence_seed{s}.csv").exists()}
     if not runs:
-        raise SystemExit("no results/*/runs.csv found; run run_baseline.py first")
+        raise SystemExit(f"no {RESULTS}/*/runs.csv found; run run_baseline.py first")
     return pd.concat(runs, ignore_index=True), curves
 
 
@@ -73,7 +79,8 @@ def write_table(runs):
         cells = []
         for c in cols:
             v, s = row[c], std.loc[name, c]
-            fmt = "{:.0f}" if c in ("evals_to_converge", "evals_to_best", "n_evals") else "{:.3f}"
+            fmt = ("{:.0f}" if c in ("evals_to_converge", "evals_to_best", "n_evals", "population_size",
+                                     "n_generations") else "{:.3f}")
             cells.append("–" if pd.isna(v) else fmt.format(v) + ("" if pd.isna(s) else " ± " + fmt.format(s)))
         lines.append(f"| {name} | {count[name]} | " + " | ".join(cells) + " |")
     (RESULTS / "results_table.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -203,7 +210,9 @@ def plot_4d_html(runs):
     fig.write_html(RESULTS / "response_4d.html", include_plotlyjs="cdn")
 
 
-def main():
+def main(root="results"):
+    global RESULTS
+    RESULTS = Path(root)
     runs, curves = load()
     write_table(runs)
     plot_convergence(runs, curves)
@@ -213,4 +222,6 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--root", default="results", help="folder holding baseline/ and <OPTIMIZER>/")
+    main(parser.parse_args().root)
