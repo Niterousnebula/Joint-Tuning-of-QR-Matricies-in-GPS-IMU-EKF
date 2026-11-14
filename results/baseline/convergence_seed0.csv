@@ -1,0 +1,2 @@
+k,fitness,best_so_far,elapsed,log_q_acc,log_q_gyro,log_q_ba,log_q_bg,log_r_xy,log_r_z,log_r_vel
+1,3.7752999487175414,3.7752999487175414,7.96481639999547,0.2,-3.0,-5.0,-8.0,1.0,1.5,0.0
