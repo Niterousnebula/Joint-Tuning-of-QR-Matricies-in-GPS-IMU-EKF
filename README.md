@@ -24,6 +24,28 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 
 Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
 
+## PSO (this branch)
+
+`PSO.py` runs global-best Particle Swarm Optimization on the 7-D log10 decision vector within `[LOWER, UPPER]`. Its settings are in `PSO_config.py`.
+
+| Setting | Value |
+|---|---|
+| Swarm size × iterations | 20 × 50 = 1000 evaluations per seed |
+| Seeds | 0, 1, 2, 3, 4 (5000 evaluations in total) |
+| Inertia w | linear from 0.9 to 0.4 |
+| c1, c2 | 1.49445, 1.49445 |
+| Velocity clamp | 20 % of each parameter's bound range |
+| Bounds handling | absorbing walls: position clipped, outward velocity set to 0 |
+| Initial swarm | uniform within the bounds (THETA0 is not seeded in) |
+
+Every candidate is scored through `ekf.make_cost_fn`, so the budget, the convergence curve and the timing match the other optimizers.
+
+```bash
+python PSO.py                                        # all seeds -> results/PSO/
+python PSO.py --seeds 0 --max-evals 40 --swarm 8     # quick check
+python PSO.py --workers 4                            # parallel fitness evaluations
+```
+
 ## Layout
 
 | Path | Purpose |
