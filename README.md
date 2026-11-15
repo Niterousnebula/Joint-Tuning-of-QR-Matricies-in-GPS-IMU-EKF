@@ -566,24 +566,7 @@ The benchmark refuses to start unless the `results` branch is checked out (`--al
 | `results/benchmark_20261114_233504/` | GA, PSO, DE, GWO: population 200, 10,000 evaluations × seeds 1–5, RTX 4060 Laptop GPU; 4 h 10 min in total. Validation passed (max GPU–CPU difference 7.4e-8 m); every seed used exactly 10,000 evaluations |
 | `results/HISA/` | HISA: 746,496 → 74,650 → 7,465 candidates (Int25 → Int10 → Int1), same GPU; 45.2 min. Validation passed at all levels (max difference 5.6e-10 m). Includes `figures/` and `comparison_with_benchmark.md` |
 
-All final metrics are re-scored by the filterpy reference. Mean ± std over 5 seeds; HISA is one deterministic run.
-
-| Method | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | Robustness mean ΔRMSE_h (m) | Robustness max ΔRMSE_h (m) | Literal evaluations | EKF steps (predictions + updates) | T_total |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Baseline (THETA0) | 3.775 | – | +0.171 | 0.97 | +0.022 | +0.049 | 1 | 40,576 | 5 s |
-| GA | 3.546 ± 0.016 | −0.229 | −0.058 | 1.98 ± 1.59 | +0.284 ± 0.080 | +0.733 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
-| PSO | 3.499 ± 0.001 | −0.276 | −0.105 | 3.68 ± 0.32 | +0.373 ± 0.010 | +0.721 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
-| DE | 3.538 ± 0.012 | −0.237 | −0.066 | 2.75 ± 0.84 | +0.282 ± 0.014 | +0.623 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
-| GWO | 3.501 ± 0.001 | −0.274 | −0.103 | 3.79 ± 0.13 | +0.381 ± 0.027 | +0.730 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
-| HISA | 3.740 | −0.036 | +0.136 | 3.25 | +0.032 | +0.061 | 828,611 (44,790 Int1-normalized) | 2.32 × 10⁹ | 45.2 min |
-
-What the HISA run shows:
-
-- **Accuracy.** HISA improves on the baseline EKF by 0.036 m but stays 0.136 m worse than raw GPS. The four population optimizers reach 3.50–3.55 m, below raw GPS. HISA searches the initial bias states and R with Q fixed at `THETA0`. The filter re-estimates the initial biases within seconds, so they barely change the whole-flight error: all 7,465 Int1 finalists lie within about 0.025 m of each other.
-- **R decides the result, and the winner sits on the edge of the grid.** Every Int1 finalist has `log10 r_xy = 0`, the lowest value searched; the winner has `log10 r_z = 0.5`, also the lowest. The four optimizers settled where HISA's grid cannot reach: `log10 r_xy` ≈ −0.3 to −0.65 (more trust in GPS position), `log10 r_vel` ≈ 1.7 to 2.0 (GPS velocity almost ignored, whereas HISA ties `r_vel = r_xy/10`), and `log10 q_gyro` ≈ −5.5 to −6 (THETA0: −3). A wider R grid, an untied `r_vel`, or searching Q as well would be the next steps.
-- **Robustness.** The HISA winner degrades by only +0.032 m under the perturbations, close to the baseline, against +0.28 to +0.38 m for the four optimizers. Their lower `r_xy` makes the estimate follow GPS position more closely, so it also follows added GPS noise. Accuracy and robustness trade off along this axis.
-- **Screening fidelity.** Among the Int1 finalists, the Spearman rank correlation between Int25 and Int1 scores is about 0.00, and between Int10 and Int1 it is −0.21 (`figures/stage_progression.png`). In this flat region the coarse levels do not preserve the order. They do separate the R values: the Int25 → Int10 cut kept almost only `r_xy = 1`.
-- **Compute.** With 9 R combinations, HISA does 828,611 literal evaluations, 44,790 Int1-normalized, and 2.32 × 10⁹ EKF steps. That is about 5.7 times the steps of one 10,000-evaluation seed, and 1.15 times the steps of all five seeds of one optimizer. HISA's single run took 45 min of wall-clock time, against about 61 min for the five seeds of each other optimizer.
+The headline numbers, the best parameter vectors, the findings and the graphs for both runs are in [Results summary](#results-summary) near the top of this README.
 
 ## Data
 
