@@ -20,6 +20,7 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 |---|---|
 | `main` | Data, the EKF, the canonical fitness function and this README. Everyone uses it unchanged |
 | `ga`, `pso`, `de`, `gwo` | One optimizer each: its code and its config file, built on `main` |
+| `hisa` | The Heuristic Informed Search Algorithm (`HISA.py`, `HISA_config.py`, `plot_hisa.py`), built on `main` |
 | `results` | All four optimizers merged in, `run_benchmark.py`, runs of every optimizer against the baseline, and the evaluation figures |
 
 Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
@@ -48,6 +49,49 @@ python PSO.py                                        # all seeds -> results/PSO_
 python PSO.py --seeds 1 --max-evals 40 --swarm 8     # quick check
 python PSO.py --backend cpu --workers 10             # filterpy reference on the CPU
 ```
+
+## HISA: Heuristic Informed Search Algorithm (`hisa` branch)
+
+HISA is a deterministic coarse-to-fine grid search. Each candidate is one joint combination of the six **initial bias states** and **R**, scored by the same EKF and the same whole-flight RMSE_h. The Q noise densities stay at `THETA0`. The code is `HISA.py`, the settings are in `HISA_config.py`, and `plot_hisa.py` draws the figures from the CSV outputs only.
+
+```text
+signed log grid ±10^e, e ∈ {−3,…,2}, zero excluded          4,826,809 → 2,985,984 bias patterns
+accelerometer axes within 0.5 decade (one decade); gyro free; all 64 signs   → 82,944 bias candidates
+× R: log10 r_xy ∈ {0,1,2}, log10 r_z ∈ {0.5,1.5,2.5}, r_vel = r_xy/10 (9)  → 746,496 joint candidates
+Int25: all 746,496        → best 10 % (74,650)
+Int10: 74,650             → best 10 % (7,465)
+Int1:  7,465 (canonical filter and fitness) → winner
+```
+
+| Item | Definition |
+|---|---|
+| Bias values | Set the filter's initial `b_a`, `b_g` (`x0[10:16]`); the EKF keeps estimating them |
+| R | Searched jointly with the biases; never searched after the bias search or fixed at `THETA0` |
+| IntN | Every N IMU intervals are integrated into one prediction (dt-weighted mean of accel and gyro, dt = block length), followed by the last GPS fix of the block. The filter is unchanged; only its input stream is coarser. Int1 is the canonical run |
+| Ranking | Whole-flight RMSE_h at that level; ties broken by `candidate_id`; scores are compared only within one level |
+| Best so far | The best of each level is evaluated first on the next level, then compared with that level's candidates |
+| Final metrics | The Int1 winner is re-scored by the filterpy reference with the benchmark's RMSE_h, robustness and NIS |
+| Validation | At every level, the best, the worst and a spread of candidates are re-scored by filterpy on the same stream; the run fails if any difference exceeds `TOL_RMSE` |
+
+**Workload is reported in three separate ways, and they are never mixed:**
+
+| Measure | Int25 | Int10 | Int1 | Total |
+|---|---:|---:|---:|---:|
+| Literal candidate evaluations | 746,496 | 74,650 | 7,465 | 828,611 |
+| Int1-normalized cost ($n/N$) | 29,859.84 | 7,465 | 7,465 | 44,789.84 |
+| EKF steps per candidate (predictions + GPS updates) | 1,082 + 1,082 | 2,705 + 2,705 | 27,047 + 13,529 | |
+
+The spec's $1/N$ normalization counts predictions only. Coarse streams keep one GPS update per block, so the measured step count of an Int25 evaluation is about 1/19 of an Int1 evaluation, not 1/25. `stage_summary.csv` records both, together with wall-clock time.
+
+```bash
+python HISA.py                                   # -> results/HISA/  (refuses to overwrite)
+python HISA.py --limit 3000 --out results/HISA_smoke
+python plot_hisa.py --hisa results/HISA --benchmark results/benchmark_<stamp>
+```
+
+Outputs: `candidates_all.csv.gz`, `int25_results.csv.gz`, `int10_results.csv`, `int1_results.csv`, `best_so_far.csv`, `final_best.csv`, `stage_summary.csv`, `config_snapshot.json`, `runs.csv` (benchmark schema), `ekf_error_timeseries.csv`, `validation/`, and `figures/`. The two largest tables are gzip-compressed (pandas reads them directly) to stay under GitHub's file-size limit.
+
+**Comparison with GA/PSO/DE/GWO.** The methods differ in decision vector (6 initial biases + R vs 7 log-variances) and in literal evaluation counts, and HISA runs once because it is deterministic. The fair comparison is therefore the final metrics, all computed by the filterpy reference, together with the measured workload and wall-clock time on the same GPU.
 
 ## Layout
 
@@ -438,6 +482,32 @@ Before any optimizer runs, the benchmark checks the GPU objective. GA's first ge
 After each optimizer, every seed is checked to have `n_evals` (evaluations recorded), `n_objective_evals` (candidates the GPU actually scored) and convergence-curve rows all equal to 10,000, so the evaluation count is measured, not inferred from the number of generations. The final RMSE, robustness and NIS in `runs.csv` come from the filterpy reference re-scoring the best θ (see "GPU batched evaluation"). `t_total`, `t_objective` and `n_generations` give the compute cost.
 
 The benchmark refuses to start unless the `results` branch is checked out (`--allow-any-branch` overrides this) and all four configs set population 200, 10,000 evaluations, seeds 1–5 and `BACKEND = "gpu"`. A lock file, `results/.benchmark.lock`, stops a second benchmark from sharing the GPU.
+
+### Results: GPU benchmark and HISA
+
+| Folder | Run |
+|---|---|
+| `results/benchmark_20261114_233504/` | GA, PSO, DE, GWO: population 200, 10,000 evaluations × seeds 1–5, RTX 4060 Laptop GPU; 4 h 10 min in total. Validation passed (max GPU–CPU difference 7.4e-8 m); every seed used exactly 10,000 evaluations |
+| `results/HISA/` | HISA: 746,496 → 74,650 → 7,465 candidates (Int25 → Int10 → Int1), same GPU; 45.2 min. Validation passed at all levels (max difference 5.6e-10 m). Includes `figures/` and `comparison_with_benchmark.md` |
+
+All final metrics are re-scored by the filterpy reference. Mean ± std over 5 seeds; HISA is one deterministic run.
+
+| Method | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | Robustness mean ΔRMSE_h (m) | Robustness max ΔRMSE_h (m) | Literal evaluations | EKF steps (predictions + updates) | T_total |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| Baseline (THETA0) | 3.775 | – | +0.171 | 0.97 | +0.022 | +0.049 | 1 | 40,576 | 5 s |
+| GA | 3.546 ± 0.016 | −0.229 | −0.058 | 1.98 ± 1.59 | +0.284 ± 0.080 | +0.733 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
+| PSO | 3.499 ± 0.001 | −0.276 | −0.105 | 3.68 ± 0.32 | +0.373 ± 0.010 | +0.721 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
+| DE | 3.538 ± 0.012 | −0.237 | −0.066 | 2.75 ± 0.84 | +0.282 ± 0.014 | +0.623 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
+| GWO | 3.501 ± 0.001 | −0.274 | −0.103 | 3.79 ± 0.13 | +0.381 ± 0.027 | +0.730 | 10,000 | 4.06 × 10⁸ | 11.8 min per seed |
+| HISA | 3.740 | −0.036 | +0.136 | 3.25 | +0.032 | +0.061 | 828,611 (44,790 Int1-normalized) | 2.32 × 10⁹ | 45.2 min |
+
+What the HISA run shows:
+
+- **Accuracy.** HISA improves on the baseline EKF by 0.036 m but stays 0.136 m worse than raw GPS. The four population optimizers reach 3.50–3.55 m, below raw GPS. HISA searches the initial bias states and R with Q fixed at `THETA0`. The filter re-estimates the initial biases within seconds, so they barely change the whole-flight error: all 7,465 Int1 finalists lie within about 0.025 m of each other.
+- **R decides the result, and the winner sits on the edge of the grid.** Every Int1 finalist has `log10 r_xy = 0`, the lowest value searched; the winner has `log10 r_z = 0.5`, also the lowest. The four optimizers settled where HISA's grid cannot reach: `log10 r_xy` ≈ −0.3 to −0.65 (more trust in GPS position), `log10 r_vel` ≈ 1.7 to 2.0 (GPS velocity almost ignored, whereas HISA ties `r_vel = r_xy/10`), and `log10 q_gyro` ≈ −5.5 to −6 (THETA0: −3). A wider R grid, an untied `r_vel`, or searching Q as well would be the next steps.
+- **Robustness.** The HISA winner degrades by only +0.032 m under the perturbations, close to the baseline, against +0.28 to +0.38 m for the four optimizers. Their lower `r_xy` makes the estimate follow GPS position more closely, so it also follows added GPS noise. Accuracy and robustness trade off along this axis.
+- **Screening fidelity.** Among the Int1 finalists, the Spearman rank correlation between Int25 and Int1 scores is about 0.00, and between Int10 and Int1 it is −0.21 (`figures/stage_progression.png`). In this flat region the coarse levels do not preserve the order. They do separate the R values: the Int25 → Int10 cut kept almost only `r_xy = 1`.
+- **Compute.** With 9 R combinations, HISA does 828,611 literal evaluations, 44,790 Int1-normalized, and 2.32 × 10⁹ EKF steps. That is about 5.7 times the steps of one 10,000-evaluation seed, and 1.15 times the steps of all five seeds of one optimizer. HISA's single run took 45 min of wall-clock time, against about 61 min for the five seeds of each other optimizer.
 
 ## Data
 
