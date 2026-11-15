@@ -71,14 +71,22 @@ def gps_rmse(data):
 # ---------------------------------------------------------------------------
 # Canonical fitness
 # ---------------------------------------------------------------------------
-def evaluate(data, theta):
+def evaluate(data, theta, bias0=None, x0=None):
     """One complete EKF run for theta, with the fitness and the secondary diagnostics.
 
     Returns a dict: rmse_h (the fitness, PENALTY on failure), rmse_v, rmse_3d, mean_nis,
     ok, x_log and innovation_log.
+
+    bias0 (optional, 6 values [b_a, b_g]) sets the initial bias states, which the filter
+    then keeps estimating; x0 (optional) replaces the initial state from init_state.
+    Without them the run is the canonical one.
     """
     Q_c, R = theta_to_QR(theta)
-    x0, P0 = init_state(data)
+    x_init, P0 = init_state(data)
+    x0 = x_init if x0 is None else np.array(x0, dtype=float)
+    if bias0 is not None:
+        x0 = x0.copy()
+        x0[10:16] = bias0
     x_log, innovation_log, mean_nis, ok = run_ekf(data, Q_c, R, x0, P0)
     out = {"ok": ok, "mean_nis": mean_nis, "x_log": x_log, "innovation_log": innovation_log,
            "rmse_h": PENALTY, "rmse_v": np.nan, "rmse_3d": np.nan}
@@ -296,20 +304,21 @@ def evals_to_converge(best_so_far, fraction=CONVERGENCE_FRACTION):
 # ---------------------------------------------------------------------------
 # Robustness: whole-flight RMSE degradation under predefined perturbations
 # ---------------------------------------------------------------------------
-def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS):
+def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=None):
     """Degradation of a fixed theta under each perturbation of the flight.
 
-    theta is never re-tuned here. For each perturbation:
+    theta (and bias0, the optional initial bias states) is never re-tuned here.
+    For each perturbation:
         delta     = RMSE_h,perturbed - RMSE_h,clean          (m, lower is better)
         delta_pct = 100 * delta / RMSE_h,clean
     Returns {"rmse_clean", "per_perturbation": {name: {rmse, delta, delta_pct}},
              "delta_mean", "delta_max"}.
     """
     if rmse_clean is None:
-        rmse_clean = fitness(data, theta)
+        rmse_clean = evaluate(data, theta, bias0=bias0)["rmse_h"]
     per = {}
     for name, kwargs in perturbations.items():
-        value = fitness(perturb(data, **kwargs), theta)
+        value = evaluate(perturb(data, **kwargs), theta, bias0=bias0)["rmse_h"]
         delta = value - rmse_clean
         per[name] = {"rmse": value, "delta": delta, "delta_pct": 100.0 * delta / rmse_clean}
     deltas = np.array([p["delta"] for p in per.values()])
