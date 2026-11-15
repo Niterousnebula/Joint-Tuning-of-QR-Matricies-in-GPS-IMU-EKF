@@ -577,13 +577,14 @@ After each optimizer, every seed is checked to have `n_evals` (evaluations recor
 
 The benchmark refuses to start unless the `results` branch is checked out (`--allow-any-branch` overrides this) and all four configs set population 200, 10,000 evaluations, seeds 1–5 and `BACKEND = "gpu"`. A lock file, `results/.benchmark.lock`, stops a second benchmark from sharing the GPU.
 
-### Results: GPU benchmark
+### Results: GPU benchmark and HISA
 
 | Folder | Run |
 |---|---|
 | `results/benchmark_20261114_233504/` | GA, PSO, DE, GWO: population 200, 10,000 evaluations × seeds 1–5, RTX 4060 Laptop GPU; 4 h 10 min in total. Validation passed (max GPU–CPU difference 7.4e-8 m); every seed used exactly 10,000 evaluations |
+| `results/HISA/` | HISA: 2,239,488 candidates at Int50 → best 5,210 at Int1, same GPU; 50.7 min. Validation passed at both levels (max GPU–CPU difference 8.4e-8 m). The search finished in one run; its last step (filterpy re-score of the winner and the summary files) was completed with `HISA.py --finish`, so per-level times come from file timestamps (`config_snapshot.json` notes this). Includes `figures/` and `comparison_with_benchmark.md` |
 
-The headline numbers, the best parameter vectors, the findings and the graphs are in [Results summary](#results-summary) near the top of this README. HISA results will be added under `results/HISA/` after the upgraded run (see the HISA section).
+The headline numbers, the best parameter vectors, the findings and the graphs for both runs are in [Results summary](#results-summary) near the top of this README.
 
 ## Data
 
