@@ -24,6 +24,31 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 
 Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
 
+## PSO (this branch)
+
+`PSO.py` runs global-best Particle Swarm Optimization on the 7-D log10 decision vector within `[LOWER, UPPER]`. Its settings are in `PSO_config.py`.
+
+| Setting | Value |
+|---|---|
+| Swarm size × iterations | 200 × 50 = 10,000 evaluations per seed |
+| Seeds | 1, 2, 3, 4, 5 (50,000 evaluations in total) |
+| Objective backend | GPU: each iteration's 200 particles are one batched EKF pass (`ekf/gpu.py`) |
+| Inertia w | linear from 0.9 to 0.4 |
+| c1, c2 | 1.49445, 1.49445 |
+| Velocity clamp | 20 % of each parameter's bound range |
+| Bounds handling | absorbing walls: position clipped, outward velocity set to 0 |
+| Initial swarm | uniform within the bounds (THETA0 is not seeded in) |
+
+Every candidate is scored through `ekf.make_cost_fn`, so the budget, the convergence curve and the timing match the other optimizers.
+
+While it runs, every evaluation is appended to `results/PSO_gpu/pso_log.csv` as soon as its iteration is scored. Each row holds `seed, iteration, particle, k, generation, fitness, best_so_far, elapsed` and the 7 θ values, so you can open the file mid-run to watch progress. Rerunning a seed replaces that seed's rows. A progress line is also printed after each iteration. `results/PSO/` holds the earlier 20 × 50 CPU runs (seeds 0–4) and is not overwritten.
+
+```bash
+python PSO.py                                        # all seeds -> results/PSO_gpu/
+python PSO.py --seeds 1 --max-evals 40 --swarm 8     # quick check
+python PSO.py --backend cpu --workers 10             # filterpy reference on the CPU
+```
+
 ## Layout
 
 | Path | Purpose |
@@ -32,6 +57,7 @@ Changes to the data, the filter or the fitness function go into `main` first and
 | `ekf/data.py` | `load_data`, plus `perturb` and `PERTURBATIONS` for the robustness tests |
 | `ekf/filter.py` | The EKF, built on `filterpy.kalman.ExtendedKalmanFilter` |
 | `ekf/tuning.py` | Decision vector, bounds, `theta_to_QR`, the canonical `fitness`, `FitnessTracker`, `robustness` and the result helpers |
+| `ekf/gpu.py` | The same EKF batched over candidates on the GPU (PyTorch, float64), used by `FitnessTracker(backend="gpu")`, and `compare_with_cpu` |
 | `run_baseline.py` | Evaluates `THETA0` through the same fitness and writes `results/baseline/` |
 
 ## Quick start
@@ -60,6 +86,13 @@ cost_fn.close()
 ```
 
 With `n_workers > 1` the script must run its optimizer under `if __name__ == "__main__":`, which Windows multiprocessing requires.
+
+To score each population as one batch on the GPU instead, pass `backend="gpu"` (needs a CUDA build of PyTorch, see `requirements.txt`):
+
+```python
+cost_fn = ekf.make_cost_fn(data, max_evals=10000, backend="gpu")
+costs = cost_fn.evaluate_many(population)         # 200 candidates -> one batched EKF pass
+```
 
 ## Reference results
 
@@ -236,9 +269,26 @@ A run that diverges scores `PENALTY = 1000` m. The baseline `THETA0` and every o
 - counts evaluations and stops at `max_evals` (`BudgetExhausted` for single calls; `evaluate_many` scores only what still fits),
 - clips candidates to the bounds,
 - records $J_k$, the best-so-far $J^*(k)$ and elapsed time after every evaluation,
-- can score a population in parallel (`n_workers`), recording results in population order, so the count and the curve are the same as in a serial run.
+- can score a population in parallel (`n_workers`), recording results in population order, so the count and the curve are the same as in a serial run,
+- or, with `backend="gpu"`, score the whole population as one batched EKF on the GPU (next section),
+- numbers each objective call as a generation and records `generation` with every evaluation.
 
 The perturbed copies of the flight are never used inside the fitness.
+
+### GPU batched evaluation (`ekf/gpu.py`)
+
+```text
+CPU reference:   candidate 1 -> EKF, candidate 2 -> EKF, ..., candidate 200 -> EKF
+GPU backend:     [200 candidates] -> batched EKF -> [200 fitness values]
+```
+
+Only the candidate dimension is batched. The time recursion is the reference loop unchanged: the same IMU predictions, the same GPS updates in the same order, quaternion normalisation after each, and the same divergence checks. Each candidate keeps its own state, covariance, $Q_c$ and $R$. All arithmetic is float64. The small quaternion matrices come from constant matrices built from the reference helpers in `filter.py`, so both backends use the same functions. Each IMU step (prediction plus 0, 1 or 2 GPS updates) is recorded once as a CUDA graph and replayed, which removes Python overhead from the 27 048-step loop.
+
+**Equivalence.** `ekf.gpu.compare_with_cpu(data, thetas)` scores the same candidates with both backends; the accepted tolerance is `TOL_RMSE = 1e-6` m and `TOL_NIS_REL = 1e-6`. On the RTX 4060, for GA seed 1's first generation (200 candidates, `results/validation_gpu_vs_cpu/` on the `results` branch), 195 candidates agreed to better than $10^{-12}$ m. The largest fitness difference was $7.4 \times 10^{-8}$ m, for a strongly overconfident candidate (mean NIS 110) whose ill-conditioned updates amplify rounding. The largest relative difference in mean NIS was $7.6 \times 10^{-9}$. A candidate that diverges fails on both backends and scores `PENALTY`.
+
+**Reported values always come from the reference.** `run_summary` re-scores the final best theta with the filterpy filter on the CPU, and the robustness runs are CPU runs too. The GPU only drives the search. `best_fitness_search` is the value the search saw and `search_vs_final_diff` shows the (rounding-level) difference.
+
+**Speed.** One batch of 200 candidates takes about 15 s on an RTX 4060 Laptop GPU, about 0.07 s per evaluation against about 7 s for one CPU evaluation.
 
 ### Experimental structure
 
@@ -319,7 +369,9 @@ The primary, hardware-independent measure is $N_{eval}$:
 
 > One evaluation = one complete execution of the 16-state EKF over the full flight for one candidate Q/R parameter set, followed by calculation of the fitness.
 
-Every optimizer gets the same `max_evals`, so $N_{eval}$ is the same for all of them by design. Secondary, hardware-dependent measures: $T_{total}$ (`t_total`, wall-clock seconds for the run) and $T_{eval} = T_{total}/N_{eval}$ (`t_eval`). Wall-clock values are only comparable when measured on one machine with the same `n_workers`.
+Every optimizer gets the same `max_evals`, so $N_{eval}$ is the same for all of them by design. `n_evals` (evaluations recorded) and `n_objective_evals` (candidates the backend actually scored) are counted independently, and both must equal `max_evals`. `n_generations` is the number of objective calls and `population_size` the configured population.
+
+Secondary, hardware-dependent measures: $T_{total}$ (`t_total`, wall-clock seconds for the run), $T_{eval} = T_{total}/N_{eval}$ (`t_eval`), and $T_{obj}$ (`t_objective`, time inside the objective only; `t_objective_per_eval`). Wall-clock values are only comparable when measured on one machine with the same `backend` and `n_workers`.
 
 ### Result table
 
@@ -388,4 +440,4 @@ Files hold one ETH Zurich flight of about 2,714 s. They keep the original datase
 4. **Sensor-log breaks** at t = 774.49, 1772.16 and 2616.03 s, where GPS jumps by 4–13 m (`is_jump`). The filter has no outlier gate and takes a few seconds to recover.
 5. **Ground-truth timing** is a fit, good to about ±0.3 s over most of the flight; the last 102 rows (`stretch` 3) are less certain.
 6. **10 Hz IMU.** The IMU log is sparse and heavily aliased, so the accelerometer noise density is large and the prediction is weak between fixes.
-7. **Wall-clock time** depends on the machine and on `n_workers`; compare optimizers on $N_{eval}$ and on convergence curves first.
+7. **Wall-clock time** depends on the machine, the `backend` and `n_workers`; compare optimizers on $N_{eval}$ and on convergence curves first.
