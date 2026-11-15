@@ -1,0 +1,56 @@
+{
+  "id": "inavwhu/playground00",
+  "label": "iNav-WHU playground00 (ADIS16465 IMU 200 Hz, F9P GNSS 1 Hz)",
+  "source_files": [
+    "playground00_ADIS16465_IMU.txt",
+    "playground00_F9P_GNSS.pos",
+    "playground00_groundtruth.nav"
+  ],
+  "time_base": "GNSS seconds of week, shared by all files",
+  "imu_increment_dt_s": 0.005000000004656613,
+  "imu_frame": "x front, y right, z down (static az = -g)",
+  "gnss": "F9P single point positioning, 1 Hz, no velocity (gps ve/vn/vu are NaN); std_e/std_n/std_u are the receiver's reported sigmas in metres",
+  "gps_origin_lat_lon_alt": [
+    30.53082221428571,
+    114.34941315000002,
+    13.466392857142855
+  ],
+  "gps_origin_method": "mean of 28 fixes while the ground truth is still at its origin",
+  "gt_first_motion_t_source_s": 198897.04,
+  "gt_frame_conversion": "NED -> ENU: e=pos_e, n=pos_n, u=-pos_d, ve=vel_e, vn=vel_n, vu=-vel_d",
+  "gt_attitude": "roll, pitch, yaw not carried into the canonical format",
+  "t0_source_s": 198869.145107,
+  "imu_samples": 265330,
+  "imu_dropped_invalid": 0,
+  "imu_dropped_outside_kept_segment": 0,
+  "imu_duration_s": 1326.528381000011,
+  "imu_rate_hz": 199.99999981373549,
+  "imu_max_gap_s": 0.005020000011427328,
+  "units": {
+    "time": "s",
+    "accel": "m/s^2",
+    "gyro": "rad/s",
+    "position": "m (ENU)",
+    "velocity": "m/s (ENU)"
+  },
+  "frames": "IMU in the sensor/body frame as logged; GPS and GT in ENU",
+  "gps_samples": 1326,
+  "gps_dropped": 0,
+  "gps_start_s": 0.8548930000106338,
+  "gps_end_s": 1325.8548930000106,
+  "gt_decimation_step": 20,
+  "gt_samples": 13266,
+  "gt_dropped": 343935,
+  "gt_start_s": 0.004893000004813075,
+  "gt_end_s": 1326.5048930000048,
+  "start_specific_force_ms2": 9.791430701162158,
+  "ekf_ready": {
+    "ready": true,
+    "reasons": [],
+    "gps_channels": [
+      "e",
+      "n",
+      "u"
+    ]
+  }
+}
