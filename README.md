@@ -24,7 +24,7 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 
 Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
 
-## PSO (this branch)
+## PSO settings (from the `pso` branch)
 
 `PSO.py` runs global-best Particle Swarm Optimization on the 7-D log10 decision vector within `[LOWER, UPPER]`. Its settings are in `PSO_config.py`.
 
