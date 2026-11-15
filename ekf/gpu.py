@@ -25,9 +25,10 @@ import time
 
 import numpy as np
 import torch
+from scipy.stats import chi2
 
-from .filter import (G_NAV, MAX_POSITION, N_MEAS, N_STATES, d_rot_times_a_dq, init_state,
-                     left_matrix, omega_matrix, quat_to_rot, xi_matrix)
+from .filter import (G_NAV, MAX_POSITION, N_MEAS, N_STATES, OPTIONS, d_rot_times_a_dq, init_state,
+                     left_matrix, measurement_channels, omega_matrix, quat_to_rot, xi_matrix)
 
 DTYPE = torch.float64
 TOL_RMSE = 1e-6          # m; largest accepted |RMSE_gpu - RMSE_cpu| for any candidate
@@ -76,13 +77,14 @@ class _Batch:
         self.B = B
         z = lambda *s: torch.zeros(*s, dtype=DTYPE, device=dev)
         self.x, self.P = z(B, N_STATES), z(B, N_STATES, N_STATES)
-        self.Q_c, self.R = z(B, 12), z(B, N_MEAS, N_MEAS)
+        self.Q_c, self.R = z(B, 12), z(B, ev.m, ev.m)
         self.F = ev.I16.expand(B, N_STATES, N_STATES).clone()
         self.G = z(B, N_STATES, 12)
         self.G[:, 10:13, 6:9] = ev.I3
         self.G[:, 13:16, 9:12] = ev.I3
         self.failed = torch.zeros(B, dtype=torch.bool, device=dev)
         self.nis_sum, self.n_upd = z(B), z(B)
+        self.t_last, self.n_rej = z(B), z(B)        # gate: time of the last accepted fix, fixes rejected
         self.pos_log = z(ev.n_imu, B, 3)
         self.s = torch.zeros(1, dtype=torch.long, device=dev)   # IMU step counter (k - 1)
         self.u = torch.zeros(1, dtype=torch.long, device=dev)   # GPS update counter
@@ -106,7 +108,10 @@ class GpuEvaluator:
 
         t_imu, accel, gyro = data["t_imu"], data["accel"], data["gyro"]
         t_gps = data["t_gps"]
-        z_gps = np.hstack([data["p_gps"], data["v_gps"]])
+        self.channels = measurement_channels(data)       # the GPS channels this dataset provides
+        self.m = len(self.channels)
+        self.ch = torch.as_tensor(self.channels, device=dev)
+        z_gps = np.hstack([data["p_gps"], data["v_gps"]])[:, self.channels]
         self.n_imu = n_imu = len(t_imu)
 
         # The reference schedule of run_ekf: which GPS fixes follow each IMU prediction
@@ -125,6 +130,11 @@ class GpuEvaluator:
         self.u_a, self.u_w = T(accel[:-1]), T(gyro[:-1])
         self.u_dt = T(np.diff(t_imu))
         self.z = T(z_gps[j0:j0 + self.n_updates])
+        self.zt = T(t_gps[j0:j0 + self.n_updates])
+        self.gate = OPTIONS["gate"]                    # read when the evaluator is built
+        self.gate_limit = float(chi2.isf(OPTIONS["gate_p"], self.m))
+        self.gate_timeout = OPTIONS["gate_timeout_s"]
+        self.t_start = float(t_imu[0])
 
         x_init, P0 = init_state(data)
         self.x0, self.P0 = T(x_init if x0 is None else x0), T(P0)
@@ -218,23 +228,37 @@ class GpuEvaluator:
         self._normalize(b)
 
     def _update(self, b):
-        """filterpy ExtendedKalmanFilter.update with H = [I 0] (Joseph form), then normalize."""
-        x, P, R = b.x, b.P, b.R
-        z = self.z.index_select(0, b.u)                              # 1 x 6
-        PHT = P[:, :, :N_MEAS]
-        S = PHT[:, :N_MEAS, :] + R
+        """filterpy ExtendedKalmanFilter.update (Joseph form) with the chi-square gate, then normalize.
+
+        A rejected fix leaves x and P untouched, exactly as run_ekf skips it. Everything is masked,
+        never branched, so the step stays valid inside a CUDA graph.
+        """
+        x, P, R, ch = b.x, b.P, b.R, self.ch
+        z = self.z.index_select(0, b.u)                              # 1 x m
+        PHT = P.index_select(2, ch)                                  # B x 16 x m
+        S = PHT.index_select(1, ch) + R
         SI, info = torch.linalg.inv_ex(S)
         K = PHT @ SI
-        y = z - x[:, :N_MEAS]
+        y = z - x.index_select(1, ch)
         x_new = x + (K @ y.unsqueeze(2)).squeeze(2)
         I_KH = self.I16.expand_as(P).clone()
-        I_KH[:, :, :N_MEAS] -= K
+        I_KH.index_add_(2, ch, -K)
         P_new = (I_KH @ P) @ I_KH.transpose(1, 2) + (K @ R) @ K.transpose(1, 2)
         nis = ((y.unsqueeze(1) @ SI) @ y.unsqueeze(2)).view(-1)
         b.failed |= info != 0
         alive = ~b.failed
-        b.nis_sum += torch.where(alive, nis, torch.zeros_like(nis))
-        b.n_upd += alive.to(DTYPE)
+        if self.gate:
+            t_now = self.zt.index_select(0, b.u)                     # 1
+            accept = (nis <= self.gate_limit) | ((t_now - b.t_last) > self.gate_timeout)
+            b.t_last.copy_(torch.where(accept, t_now, b.t_last))
+            b.n_rej += (alive & ~accept).to(DTYPE)
+            x_new = torch.where(accept.view(-1, 1), x_new, x)
+            P_new = torch.where(accept.view(-1, 1, 1), P_new, P)
+            counted = alive & accept
+        else:
+            counted = alive
+        b.nis_sum += torch.where(counted, nis, torch.zeros_like(nis))
+        b.n_upd += counted.to(DTYPE)
         x.copy_(x_new)
         P.copy_(P_new)
         b.u += 1
@@ -256,6 +280,7 @@ class GpuEvaluator:
     # -- batch management -----------------------------------------------------
     def _reset(self, b, thetas, bias0=None):
         Q_c, R = _theta_to_qr(thetas)
+        R = R[:, self.channels][:, :, self.channels]                 # the block of the used channels
         b.Q_c.copy_(torch.as_tensor(Q_c, dtype=DTYPE))
         b.R.copy_(torch.as_tensor(R, dtype=DTYPE))
         b.x.copy_(self.x0.expand(b.B, -1))
@@ -265,6 +290,8 @@ class GpuEvaluator:
         b.failed.zero_()
         b.nis_sum.zero_()
         b.n_upd.zero_()
+        b.t_last.fill_(self.t_start)
+        b.n_rej.zero_()
         b.pos_log.zero_()
         b.pos_log[0] = self.x0[0:3]
         b.s.zero_()
@@ -328,7 +355,7 @@ class GpuEvaluator:
         out = {"rmse_h": torch.where(ok, rmse_h, torch.full_like(rmse_h, self.penalty)),
                "rmse_v": torch.where(ok, rmse_v, torch.full_like(rmse_v, float("nan"))),
                "rmse_3d": torch.where(ok, rmse_3d, torch.full_like(rmse_3d, float("nan"))),
-               "mean_nis": b.nis_sum / b.n_upd, "ok": ok}
+               "mean_nis": b.nis_sum / b.n_upd, "ok": ok, "n_rejected": b.n_rej}
         out = {k: v.cpu().numpy() for k, v in out.items()}
         self.n_evaluated += B
         self.t_gpu += time.perf_counter() - t0

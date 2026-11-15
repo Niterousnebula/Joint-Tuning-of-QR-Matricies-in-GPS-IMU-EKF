@@ -8,8 +8,10 @@ convergence_seed<seed>.csv, all written by ekf.save_run. Writes to results/:
     robustness.png                        clean -> perturbed RMSE and Delta RMSE per perturbation
     response_4d.png, response_4d.html     RMSE x robustness x convergence, coloured by compute
 
-    python plot_response.py
+    python plot_response.py                        # the default dataset: results/
+    python plot_response.py --dataset inavwhu/street00   # results/inavwhu/street00/
 """
+import argparse
 from pathlib import Path
 
 import matplotlib
@@ -19,7 +21,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-from ekf import PERTURBATIONS
+from ekf import PERTURBATIONS, results_dir
 
 RESULTS = Path("results")
 GROUPS = ["baseline", "GA", "PSO", "DE", "GWO"]
@@ -204,6 +206,10 @@ def plot_4d_html(runs):
 
 
 def main():
+    global RESULTS
+    parser = argparse.ArgumentParser(description="Benchmark figures and table")
+    parser.add_argument("--dataset", default="eth", help="processed dataset id whose results to plot")
+    RESULTS = results_dir(parser.parse_args().dataset)
     runs, curves = load()
     write_table(runs)
     plot_convergence(runs, curves)

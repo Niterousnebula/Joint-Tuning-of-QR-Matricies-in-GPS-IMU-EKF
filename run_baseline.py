@@ -1,9 +1,12 @@
 """Evaluate THETA0 with the canonical fitness and write the baseline files.
 
-    python run_baseline.py            # writes results/baseline/
+    python run_baseline.py                       # asks which processed dataset to use
+    python run_baseline.py --dataset inavwhu/street00
+    python run_baseline.py --dataset eth         # writes results/baseline/ (other datasets: results/<id>/baseline/)
 
 The baseline goes through the same FitnessTracker as every optimizer (one evaluation),
-so its row in runs.csv has exactly the same columns as an optimizer run.
+so its row in runs.csv has exactly the same columns as an optimizer run. Datasets come from
+processed_data/ (see `python -m data_pipeline`).
 """
 import argparse
 from pathlib import Path
@@ -22,6 +25,8 @@ def error_summary(err_h, motion, source):
              "motion_turn": motion == "turn"}
     rows = []
     for case, mask in cases.items():
+        if not mask.any():              # a dataset without motion labels has no hover/cruise/turn cases
+            continue
         e = err_h[mask]
         rows.append({"case": case, "source": source, "rmse_h": ekf.rmse(e),
                      "mean_err_h": e.mean(), "median_err_h": np.median(e),
@@ -29,10 +34,20 @@ def error_summary(err_h, motion, source):
     return rows
 
 
-def main(out_dir):
-    out_dir = Path(out_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
-    data = ekf.load_data()
+def main(dataset, out_dir=None, allow_unready=False, init_heading=None, gate=None):
+    if init_heading is not None:
+        ekf.filter.OPTIONS["init_heading"] = init_heading
+    if gate is not None:
+        ekf.filter.OPTIONS["gate"] = gate
+    dataset = ekf.select_dataset(dataset)
+    out_dir = Path(out_dir) if out_dir else ekf.results_dir(dataset, "baseline")
+    try:
+        data = ekf.load_data(dataset, allow_unready=allow_unready)
+    except (ekf.DatasetNotReady, FileNotFoundError) as err:
+        raise SystemExit(f"error: {err}")
+    out_dir.mkdir(parents=True, exist_ok=True)       # only once the dataset is known to load
+    print(f"Dataset {dataset}: {len(data['t_imu'])} IMU samples, {len(data['t_gps'])} GPS fixes, "
+          f"GPS channels {ekf.measurement_channels(data).tolist()} (e n u ve vn vu = 0..5)")
     t_true, p_true, motion = data["t_true"], data["p_true"], data["motion"]
 
     # Raw GPS reference, reported separately from the EKF
@@ -70,7 +85,7 @@ def main(out_dir):
     print(f"Baseline EKF THETA0 RMSE_h whole flight {row['rmse_h']:.3f} m   "
           f"(vs GPS {row['delta_vs_gps']:+.3f} m)")
     print(f"  secondary: RMSE_v {row['rmse_v']:.3f} m, RMSE_3D {row['rmse_3d']:.3f} m, "
-          f"mean NIS {row['mean_nis']:.2f} (expected {ekf.NIS_DOF} for m = {ekf.NIS_DOF})")
+          f"mean NIS {row['mean_nis']:.2f} (expected {ekf.nis_dof(data)} for m = {ekf.nis_dof(data)})")
     print(f"Robustness, Delta RMSE_h = perturbed - clean (whole flight): "
           f"mean {row['delta_rmse_mean']:+.3f} m, max {row['delta_rmse_max']:+.3f} m")
     for name in ekf.PERTURBATIONS:
@@ -82,5 +97,12 @@ def main(out_dir):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out", default="results/baseline")
-    main(parser.parse_args().out)
+    parser.add_argument("--dataset", help="processed dataset id; asked for on a terminal if omitted")
+    parser.add_argument("--out", help="output folder (default: results/[<dataset>/]baseline)")
+    parser.add_argument("--force", action="store_true",
+                        help="run even if the pipeline marked the dataset not ekf_ready")
+    parser.add_argument("--no-init-heading", action="store_true",
+                        help="switch off the GNSS-course heading initialisation (the filter before that change)")
+    parser.add_argument("--gate", action="store_true", help="switch on the chi-square GPS gate (off by default)")
+    a = parser.parse_args()
+    main(a.dataset, a.out, a.force, False if a.no_init_heading else None, True if a.gate else None)

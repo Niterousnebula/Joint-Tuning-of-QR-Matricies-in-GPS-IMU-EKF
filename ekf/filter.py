@@ -6,6 +6,7 @@ The IMU drives the prediction; GPS position and velocity drive the update.
 """
 import numpy as np
 from filterpy.kalman import ExtendedKalmanFilter
+from scipy.stats import chi2
 
 N_STATES = 16
 N_MEAS = 6
@@ -21,6 +22,27 @@ G_NAV = np.array([0.0, 0.0, -GRAVITY])
 P0_DIAG = np.r_[np.full(3, 25.0), np.full(3, 2.25), np.full(4, 0.07),
                 np.full(3, 0.25), np.full(3, 0.0027)]
 INIT_ATTITUDE_WINDOW = 1.0      # s of accelerometer data averaged for roll and pitch
+
+# Behaviour switches, read when a run starts (the batched GPU evaluator reads them when it is built).
+# Set a switch to False to get the filter exactly as it was before the feature existed.
+OPTIONS = {
+    # Chi-square gate on every GPS fix: a fix whose normalised innovation exceeds the
+    # chi2 quantile for the number of channels used is skipped. gate_p is the share of
+    # consistent fixes it would wrongly skip. After gate_timeout_s without an accepted fix the next
+    # one is accepted unconditionally, so a persistent shift of the GNSS solution cannot lock the filter out.
+    # OFF by default, because measured on ETH it does harm and no good: THETA0 3.775 -> 5.108 m (50 fixes
+    # rejected), the PSO seed-5 theta 3.499 -> 22.3 m (1174 rejected); flooring the innovation covariance
+    # at 3-8 m still gives 4.3 m / 10-11 m, or never triggers. The tuned filter's own covariance is not
+    # consistent enough to judge fixes by it, and ETH's large errors are slow 15-25 s GNSS excursions
+    # (position and velocity drifting together) that no innovation test sees. On iNav-WHU it rejects nothing.
+    "gate": False,
+    "gate_p": 1e-3,
+    "gate_timeout_s": 5.0,
+    # Initial heading from the first GNSS motion, for datasets with no GPS velocity (see init_state).
+    "init_heading": True,
+}
+HEADING_MOVE_M = 8.0            # the course is taken once the position is this far from its start
+HEADING_REST_M = 2.0            # ... measured from the last fix still within this distance (the start)
 MAX_POSITION = 1e6              # m; any position beyond this counts as diverged
 
 SL_P, SL_V, SL_Q, SL_BA, SL_BG = slice(0, 3), slice(3, 6), slice(6, 10), slice(10, 13), slice(13, 16)
@@ -130,12 +152,23 @@ def rot_to_quat(R_nb):
 # ---------------------------------------------------------------------------
 # Measurement model (GPS position and velocity)
 # ---------------------------------------------------------------------------
-def h_gps(x):
-    return x[:6]
+def measurement_channels(data):
+    """Which of the six GPS channels [e, n, u, ve, vn, vu] a dataset provides.
+
+    A channel is used when it is finite at every fix; NaN in the processed data means the
+    source has no such channel (an F9P .pos file has no velocity, a phone has no altitude).
+    The filter then updates with just those channels. Position e and n are always needed.
+    """
+    z = np.hstack([data["p_gps"], data["v_gps"]])
+    channels = np.flatnonzero(np.isfinite(z).all(axis=0))
+    if not {0, 1} <= set(channels.tolist()):
+        raise ValueError("the dataset has no usable GPS east/north position")
+    return channels
 
 
-def jacobian_H(x):
-    return H_GPS
+def nis_dof(data):
+    """Expected mean NIS of a consistent filter on this dataset: the number of channels used."""
+    return len(measurement_channels(data))
 
 
 # ---------------------------------------------------------------------------
@@ -150,10 +183,15 @@ class GpsImuEKF(ExtendedKalmanFilter):
     step's dt, so gaps in the IMU log get the right amount of process noise.
     """
 
-    def __init__(self, Q_c, R):
-        super().__init__(dim_x=N_STATES, dim_z=N_MEAS)
+    def __init__(self, Q_c, R, channels=None):
+        """R is the full 6 x 6 GPS covariance. channels (default: all six) selects the rows of
+        [p, v] that the dataset provides; the update then uses those rows of H and that block of R."""
+        self.channels = np.arange(N_MEAS) if channels is None else np.asarray(channels, dtype=int)
+        super().__init__(dim_x=N_STATES, dim_z=len(self.channels))
         self.Q_c = np.asarray(Q_c, dtype=float)
-        self.R = np.asarray(R, dtype=float)
+        R = np.asarray(R, dtype=float)
+        self.R = R[np.ix_(self.channels, self.channels)]
+        self._H = H_GPS[self.channels]
 
     # filterpy calls predict_x and then P = F P F' + Q, so F and Q are set here,
     # at the previous state, before x is propagated.
@@ -208,18 +246,84 @@ class GpsImuEKF(ExtendedKalmanFilter):
         self.predict(u=(a_m, w_m, dt))
         self.normalize()
 
+    def _jacobian(self, x):
+        return self._H
+
+    def _hx(self, x):
+        return x[self.channels]
+
+    def predicted_nis(self, z):
+        """Normalised innovation of z against the current prediction, without updating."""
+        y = z - self.x[self.channels]
+        S = self._H @ self.P @ self._H.T + self.R
+        return float(y @ np.linalg.solve(S, y))
+
     def step_update(self, z):
-        self.update(z, jacobian_H, h_gps)
+        """z holds the measurement channels only, in channel order."""
+        self.update(z, self._jacobian, self._hx)
         self.normalize()
         return float(self.y @ self.SI @ self.y)
+
+
+def _heading(R_nb):
+    """Heading of body x from north, clockwise, in radians, for a body-to-ENU rotation."""
+    return float(np.arctan2(R_nb[0, 0], R_nb[1, 0]))
+
+
+def gnss_departure(data):
+    """First GNSS motion: (course, time of the course, time the vehicle left its start), or None.
+
+    The course is the direction of the displacement from the last fix near the start to the first
+    fix HEADING_MOVE_M away, as a heading (radians from north, clockwise). The GNSS error is slow, so
+    the offset cancels in a displacement and the course is good to about 10 degrees.
+    """
+    t, p = data["t_gps"], data["p_gps"][:, :2]
+    dist = np.hypot(p[:, 0] - p[0, 0], p[:, 1] - p[0, 1])
+    moved = np.flatnonzero(dist > HEADING_MOVE_M)
+    if not len(moved):
+        return None
+    i = int(moved[0])
+    still = np.flatnonzero(dist[:i] < HEADING_REST_M)
+    j = int(still[-1]) if len(still) else 0
+    course = float(np.arctan2(p[i, 0] - p[j, 0], p[i, 1] - p[j, 1]))
+    return course, 0.5 * (t[i] + t[j]), float(t[j])
+
+
+def initial_heading_correction(data, R0):
+    """Rotation (about up) that turns the initial yaw guess into the GNSS course, or None.
+
+    The vehicle is assumed to move along its body x axis (true for a ground vehicle). The attitude is
+    propagated from the start to the middle of the first leg with the gyro (bias taken from the
+    stationary part before the vehicle leaves, when there is one), and the yaw offset that makes body x
+    point along the GNSS course there is returned as a heading change in radians.
+    """
+    dep = gnss_departure(data)
+    if dep is None:
+        return None
+    course, t_c, t_leave = dep
+    t_imu, gyro = data["t_imu"], data["gyro"]
+    k_end = int(np.searchsorted(t_imu, t_c))
+    if k_end < 2 or k_end >= len(t_imu):
+        return None
+    rest = t_imu < t_leave - 1.0
+    bias = gyro[rest].mean(axis=0) if t_leave - t_imu[0] > 3.0 and rest.sum() > 10 else np.zeros(3)
+    q = rot_to_quat(R0)
+    for k in range(1, k_end + 1):
+        q = quat_step_matrix(gyro[k - 1] - bias, t_imu[k] - t_imu[k - 1]) @ q
+        q = q / np.linalg.norm(q)
+    return float((course - _heading(quat_to_rot(q)) + np.pi) % (2 * np.pi) - np.pi)
 
 
 def init_state(data):
     """Initial state and covariance.
 
-    Position and velocity come from the first GPS fix. Roll and pitch come from the
-    mean specific force over the first second; yaw starts at 0 (body x pointing east)
-    and is corrected from GPS velocity once the vehicle moves.
+    Position and velocity come from the first GPS fix; a channel the dataset lacks
+    (NaN) starts at 0, so a dataset without GPS velocity assumes a start at rest. Roll and
+    pitch come from the mean specific force over the first second; yaw starts at 0 (body x
+    pointing east) and is corrected from GPS once the vehicle moves. With GPS velocity that
+    correction is fast. Without it (position only) yaw is only weakly observable, so when
+    OPTIONS["init_heading"] is set the initial yaw is turned to the GNSS course of the first leg
+    (initial_heading_correction); if the vehicle never moves far enough, yaw stays at east.
     """
     t_imu, accel = data["t_imu"], data["accel"]
     up = accel[t_imu < t_imu[0] + INIT_ATTITUDE_WINDOW].mean(axis=0)
@@ -230,9 +334,16 @@ def init_state(data):
     north = np.cross(up, east)
 
     x0 = np.zeros(N_STATES)
-    x0[SL_P] = data["p_gps"][0]
-    x0[SL_V] = data["v_gps"][0]
-    x0[SL_Q] = rot_to_quat(np.vstack([east, north, up]))
+    x0[SL_P] = np.nan_to_num(data["p_gps"][0], nan=0.0)
+    x0[SL_V] = np.nan_to_num(data["v_gps"][0], nan=0.0)
+    R0 = np.vstack([east, north, up])
+    has_velocity = {3, 4} <= set(measurement_channels(data).tolist())
+    if OPTIONS["init_heading"] and not has_velocity:
+        delta = initial_heading_correction(data, R0)
+        if delta is not None:               # a heading change of delta is a rotation of -delta about up
+            c, s_ = np.cos(-delta), np.sin(-delta)
+            R0 = np.array([[c, -s_, 0.0], [s_, c, 0.0], [0.0, 0.0, 1.0]]) @ R0
+    x0[SL_Q] = rot_to_quat(R0)
     return x0, np.diag(P0_DIAG)
 
 
@@ -240,18 +351,23 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
     """Run the filter over the flight, or up to t_end.
 
     Returns x_log (one row per IMU sample, STATE_COLUMNS order), innovation_log
-    (one row per GPS update, INNOVATION_COLUMNS order), mean_nis and ok, which is
-    False if the run diverged or a matrix inversion failed.
+    (one row per accepted GPS update, INNOVATION_COLUMNS order), mean_nis, ok (False if the
+    run diverged or a matrix inversion failed) and n_rejected, the number of fixes the gate skipped.
     """
     if x0 is None or P0 is None:
         x0, P0 = init_state(data)
     t_imu, accel, gyro = data["t_imu"], data["accel"], data["gyro"]
     t_gps = data["t_gps"]
-    z_gps = np.hstack([data["p_gps"], data["v_gps"]])
+    channels = measurement_channels(data)
+    z_gps = np.hstack([data["p_gps"], data["v_gps"]])[:, channels]
     n_imu, n_gps = len(t_imu), len(t_gps)
 
-    kf = GpsImuEKF(Q_c, R)
+    kf = GpsImuEKF(Q_c, R, channels)
     kf.x, kf.P = x0.copy(), P0.copy()
+    gate = OPTIONS["gate"]
+    gate_limit = chi2.isf(OPTIONS["gate_p"], len(channels))
+    gate_timeout = OPTIONS["gate_timeout_s"]
+    t_accepted, n_rejected = t_imu[0], 0
 
     x_log = np.zeros((n_imu, N_STATES))
     x_log[0] = kf.x
@@ -269,8 +385,15 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
         try:
             kf.step_predict(accel[k - 1], gyro[k - 1], t_imu[k] - t_imu[k - 1])
             while j < n_gps and t_gps[j] <= t_imu[k]:
+                if gate and t_gps[j] - t_accepted <= gate_timeout and kf.predicted_nis(z_gps[j]) > gate_limit:
+                    n_rejected += 1
+                    j += 1
+                    continue
+                t_accepted = t_gps[j]
                 nis = kf.step_update(z_gps[j])
-                innovation_log[n_updates] = np.r_[t_gps[j], kf.y, np.diag(kf.S), nis]
+                y_full, s_full = np.full(N_MEAS, np.nan), np.full(N_MEAS, np.nan)   # NaN = channel not used
+                y_full[channels], s_full[channels] = kf.y, np.diag(kf.S)
+                innovation_log[n_updates] = np.r_[t_gps[j], y_full, s_full, nis]
                 n_updates += 1
                 j += 1
         except np.linalg.LinAlgError:
@@ -282,4 +405,4 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
             break
     innovation_log = innovation_log[:n_updates]
     mean_nis = float(innovation_log[:, -1].mean()) if n_updates else float("nan")
-    return x_log[:last + 1], innovation_log, mean_nis, ok
+    return x_log[:last + 1], innovation_log, mean_nis, ok, n_rejected

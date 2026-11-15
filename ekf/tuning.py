@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 
 from .data import PERTURBATIONS, perturb
-from .filter import N_MEAS, init_state, run_ekf
+from .filter import N_MEAS, OPTIONS, init_state, nis_dof, run_ekf
 
 # log10 of the continuous noise densities and GPS variances
 THETA_NAMES = ["log_q_acc", "log_q_gyro", "log_q_ba", "log_q_bg",
@@ -25,7 +25,8 @@ LOWER_TIGHT = THETA0 - np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
 UPPER_TIGHT = THETA0 + np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
 
 PENALTY = 1000.0        # m; fitness of a run that fails
-NIS_DOF = N_MEAS        # GPS position + velocity: a consistent filter averages NIS = 6
+NIS_DOF = N_MEAS        # full GPS position + velocity: a consistent filter averages NIS = 6.
+                        # A dataset missing channels has fewer: use ekf.nis_dof(data)
 CONVERGENCE_FRACTION = 0.99
 
 
@@ -75,7 +76,7 @@ def evaluate(data, theta, bias0=None, x0=None):
     """One complete EKF run for theta, with the fitness and the secondary diagnostics.
 
     Returns a dict: rmse_h (the fitness, PENALTY on failure), rmse_v, rmse_3d, mean_nis,
-    ok, x_log and innovation_log.
+    ok, x_log, innovation_log and n_rejected (GPS fixes skipped by the gate).
 
     bias0 (optional, 6 values [b_a, b_g]) sets the initial bias states, which the filter
     then keeps estimating; x0 (optional) replaces the initial state from init_state.
@@ -87,8 +88,9 @@ def evaluate(data, theta, bias0=None, x0=None):
     if bias0 is not None:
         x0 = x0.copy()
         x0[10:16] = bias0
-    x_log, innovation_log, mean_nis, ok = run_ekf(data, Q_c, R, x0, P0)
+    x_log, innovation_log, mean_nis, ok, n_rejected = run_ekf(data, Q_c, R, x0, P0)
     out = {"ok": ok, "mean_nis": mean_nis, "x_log": x_log, "innovation_log": innovation_log,
+           "n_rejected": n_rejected,
            "rmse_h": PENALTY, "rmse_v": np.nan, "rmse_3d": np.nan}
     if ok:
         err = position_errors(data["t_imu"][:len(x_log)], x_log, data["t_true"], data["p_true"])
@@ -349,8 +351,11 @@ def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=Non
     row = {"optimizer": optimizer, "seed": seed,
            **dict(zip(THETA_NAMES, theta)),
            "rmse_h": result["rmse_h"], "rmse_v": result["rmse_v"], "rmse_3d": result["rmse_3d"],
-           "mean_nis": result["mean_nis"], "nis_dof": NIS_DOF,
-           "rmse_gps": rmse_gps, "delta_vs_gps": result["rmse_h"] - rmse_gps}
+           "mean_nis": result["mean_nis"], "nis_dof": nis_dof(data),
+           "rmse_gps": rmse_gps, "delta_vs_gps": result["rmse_h"] - rmse_gps,
+           # which filter behaviour produced the row (ekf.filter.OPTIONS)
+           "gate_enabled": bool(OPTIONS["gate"]), "init_heading": bool(OPTIONS["init_heading"]),
+           "n_gate_rejected": result["n_rejected"]}
     if rmse_baseline is not None:
         row["delta_vs_baseline"] = result["rmse_h"] - rmse_baseline
         row["improvement_vs_baseline_pct"] = 100.0 * (rmse_baseline - result["rmse_h"]) / rmse_baseline

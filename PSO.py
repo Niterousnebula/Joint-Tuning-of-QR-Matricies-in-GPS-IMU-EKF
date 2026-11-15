@@ -1,6 +1,7 @@
 """Particle Swarm Optimization (PSO) for joint Q/R tuning of the GPS-IMU EKF.
 
-    python PSO.py                         # every seed in PSO_config.SEEDS
+    python PSO.py                         # asks which processed dataset, then every seed in PSO_config.SEEDS
+    python PSO.py --dataset inavwhu/street00
     python PSO.py --seeds 0 --max-evals 40 --swarm 8   # quick check
     python PSO.py --backend cpu           # filterpy reference instead of the GPU batch
 
@@ -89,20 +90,32 @@ def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE, log=None):
 
 
 def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=None,
-                   n_workers=None, backend=None, data=None):
-    """Run every seed and save benchmark-compatible outputs (same interface as GA, DE, GWO)."""
+                   n_workers=None, backend=None, data=None, dataset=None):
+    """Run every seed and save benchmark-compatible outputs (same interface as GA, DE, GWO).
+
+    dataset is a processed dataset id (see `python -m data_pipeline`); results go to
+    <out_dir>, by default results/PSO_gpu for the default dataset and results/<id>/PSO_gpu otherwise.
+    """
     max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
     seeds = tuple(cfg.SEEDS if seeds is None else seeds)
-    out_dir = cfg.OUTPUT_DIR if out_dir is None else out_dir
+    if data is None:
+        dataset = ekf.select_dataset(dataset)
+        try:
+            data = ekf.load_data(dataset)
+        except (ekf.DatasetNotReady, FileNotFoundError) as err:
+            raise SystemExit(f"error: {err}")
+    else:
+        dataset = data.get("dataset", ekf.DEFAULT_DATASET)
+    if out_dir is None:
+        out_dir = (cfg.OUTPUT_DIR if dataset == ekf.DEFAULT_DATASET
+                   else ekf.results_dir(dataset, Path(cfg.OUTPUT_DIR).name))
     swarm_size = int(cfg.SWARM_SIZE if population_size is None else population_size)
     n_workers = int(cfg.N_WORKERS if n_workers is None else n_workers)
     backend = cfg.BACKEND if backend is None else backend
 
-    if data is None:
-        data = ekf.load_data()
     rmse_gps = ekf.gps_rmse(data)
     rmse_baseline = ekf.fitness(data, ekf.THETA0)   # reference only, not part of the budget
-    print(f"Raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m", flush=True)
+    print(f"Dataset {dataset}: raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m", flush=True)
 
     for seed in seeds:
         print(f"\n=== PSO | seed={seed} | budget={max_evals} | backend={backend} ===", flush=True)
@@ -121,8 +134,13 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=Non
               f"T_total {row['t_total']:.0f} s (objective {row['t_objective']:.0f} s)", flush=True)
 
 
-def main(seeds, max_evals, swarm_size, n_workers, out_dir, backend=None):
-    run_experiment(max_evals, seeds, out_dir, swarm_size, n_workers, backend)
+def main(seeds, max_evals, swarm_size, n_workers, out_dir, backend=None, dataset=None,
+         init_heading=None, gate=None):
+    if init_heading is not None:                     # set before the GPU evaluator is built
+        ekf.filter.OPTIONS["init_heading"] = init_heading
+    if gate is not None:
+        ekf.filter.OPTIONS["gate"] = gate
+    run_experiment(max_evals, seeds, out_dir, swarm_size, n_workers, backend, dataset=dataset)
 
 
 if __name__ == "__main__":
@@ -132,6 +150,11 @@ if __name__ == "__main__":
     parser.add_argument("--swarm", type=int, default=cfg.SWARM_SIZE)
     parser.add_argument("--workers", type=int, default=cfg.N_WORKERS)
     parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
-    parser.add_argument("--out", default=cfg.OUTPUT_DIR)
+    parser.add_argument("--dataset", help="processed dataset id; asked for on a terminal if omitted")
+    parser.add_argument("--out", help="output folder (default: results/[<dataset>/]PSO_gpu)")
+    parser.add_argument("--no-init-heading", action="store_true",
+                        help="switch off the GNSS-course heading initialisation (the filter before that change)")
+    parser.add_argument("--gate", action="store_true", help="switch on the chi-square GPS gate (off by default)")
     a = parser.parse_args()
-    main(a.seeds, a.max_evals, a.swarm, a.workers, a.out, a.backend)
+    main(a.seeds, a.max_evals, a.swarm, a.workers, a.out, a.backend, a.dataset,
+         False if a.no_init_heading else None, True if a.gate else None)
