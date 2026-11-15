@@ -96,7 +96,8 @@ class GpuEvaluator:
     rmse_v, rmse_3d, mean_nis and ok, one value per candidate, as tuning.evaluate.
     """
 
-    def __init__(self, data, device="cuda", use_graphs=True):
+    def __init__(self, data, device="cuda", use_graphs=True, x0=None):
+        """x0 (optional) replaces init_state's initial state, e.g. when data is a resampled stream."""
         from .tuning import PENALTY
         self.penalty = PENALTY
         self.device = torch.device(device)
@@ -125,8 +126,8 @@ class GpuEvaluator:
         self.u_dt = T(np.diff(t_imu))
         self.z = T(z_gps[j0:j0 + self.n_updates])
 
-        x0, P0 = init_state(data)
-        self.x0, self.P0 = T(x0), T(P0)
+        x_init, P0 = init_state(data)
+        self.x0, self.P0 = T(x_init if x0 is None else x0), T(P0)
         self.g_nav = T(G_NAV)
         self.I3 = torch.eye(3, dtype=DTYPE, device=dev)
         self.I4 = torch.eye(4, dtype=DTYPE, device=dev)
@@ -253,11 +254,13 @@ class GpuEvaluator:
         self._end_step(b)
 
     # -- batch management -----------------------------------------------------
-    def _reset(self, b, thetas):
+    def _reset(self, b, thetas, bias0=None):
         Q_c, R = _theta_to_qr(thetas)
         b.Q_c.copy_(torch.as_tensor(Q_c, dtype=DTYPE))
         b.R.copy_(torch.as_tensor(R, dtype=DTYPE))
         b.x.copy_(self.x0.expand(b.B, -1))
+        if bias0 is not None:
+            b.x[:, 10:16] = torch.as_tensor(np.asarray(bias0, dtype=float), dtype=DTYPE)
         b.P.copy_(self.P0.expand(b.B, -1, -1))
         b.failed.zero_()
         b.nis_sum.zero_()
@@ -296,12 +299,13 @@ class GpuEvaluator:
 
     # -- public ---------------------------------------------------------------
     @torch.no_grad()
-    def evaluate(self, thetas):
+    def evaluate(self, thetas, bias0=None):
+        """bias0 (optional, B x 6) sets each candidate's initial bias states [b_a, b_g]."""
         t0 = time.perf_counter()
         thetas = np.atleast_2d(np.asarray(thetas, dtype=float))
         B = len(thetas)
         b = self._batch(B, thetas)
-        self._reset(b, thetas)
+        self._reset(b, thetas, bias0)
         counts = self.counts
         if b.graphs is not None:
             graphs = b.graphs
