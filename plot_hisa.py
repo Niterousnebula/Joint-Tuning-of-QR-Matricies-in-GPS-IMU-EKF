@@ -7,9 +7,9 @@ folder); the search itself is never imported or re-run.
 
 Writes to <hisa>/figures/:
     score_vs_iteration.png      candidate score against evaluation order, per level
-    stage_progression.png       Int25 -> Int10 -> Int1 scores of the finalists, rank agreement
+    stage_progression.png       coarse -> Int1 scores of the finalists, rank agreement
     bias_distributions.png      bias exponents and signs: all candidates vs survivors of each level
-    qr_search.png               best score per R combination at each level
+    qr_search.png               best score per R combination (r_xy x r_z, one panel per r_vel) at each level
     best_so_far.png             best-so-far per level against Int1-normalized workload
     ekf_error_comparison.png    whole-flight horizontal error: raw GPS, baseline EKF, HISA winner
 and, with --benchmark, to <hisa>/:
@@ -26,7 +26,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 
-LEVEL_COLORS = {25: "#9467bd", 10: "#17becf", 1: "#d62728"}
+LEVEL_COLORS = {50: "#9467bd", 25: "#9467bd", 10: "#17becf", 1: "#d62728"}
 OPT_COLORS = {"baseline": "#555555", "GA": "#1f77b4", "PSO": "#ff7f0e", "DE": "#2ca02c", "GWO": "#8c564b",
               "HISA": "#d62728"}
 BIAS_NAMES = ["bax", "bay", "baz", "bgx", "bgy", "bgz"]
@@ -35,11 +35,19 @@ SIGN_NAMES = ["s_ax", "s_ay", "s_az", "s_gx", "s_gy", "s_gz"]
 EKF_STEPS_PER_CANONICAL_EVAL = 27047 + 13529      # Int1: IMU predictions + GPS updates
 
 
-def read_level(hisa, level):
-    for name in (f"int{level}_results.csv", f"int{level}_results.csv.gz"):
+def read_table(hisa, base):
+    """<base>.csv, <base>.csv.gz, or its parts <base>_partNN.csv.gz written by HISA.write_table."""
+    for name in (f"{base}.csv", f"{base}.csv.gz"):
         if (hisa / name).exists():
             return pd.read_csv(hisa / name)
-    raise FileNotFoundError(f"int{level}_results not found in {hisa}")
+    parts = sorted(hisa.glob(f"{base}_part*.csv.gz"))
+    if parts:
+        return pd.concat([pd.read_csv(p) for p in parts], ignore_index=True)
+    raise FileNotFoundError(f"{base} not found in {hisa}")
+
+
+def read_level(hisa, level):
+    return read_table(hisa, f"int{level}_results")
 
 
 def save(fig, path):
@@ -83,7 +91,7 @@ def stage_progression(levels, fig_dir):
     ax1.plot(range(len(cols)), top[cols].median().to_numpy(), color="k", lw=2.2, label="median of top 40")
     ax1.set_xticks(range(len(cols)), cols)
     ax1.set_ylabel("score at that level (m)")
-    ax1.set_title("Int25 → Int10 → Int1 scores of the 40 best Int1 candidates")
+    ax1.set_title(" → ".join(cols) + " scores of the 40 best Int1 candidates")
     ax1.grid(alpha=0.3)
     ax1.legend()
     rk = fin[cols].rank()
@@ -125,25 +133,38 @@ def bias_distributions(cand, levels, fig_dir):
     save(fig, fig_dir / "bias_distributions.png")
 
 
-def qr_search(levels, fig_dir):
-    fig, axes = plt.subplots(1, len(levels), figsize=(5 * len(levels), 4.2), squeeze=False)
-    for ax, (lv, t) in zip(axes[0], levels.items()):
-        piv = t.pivot_table(index="log_r_z", columns="log_r_xy", values="score", aggfunc="min")
-        cnt = t.pivot_table(index="log_r_z", columns="log_r_xy", values="score", aggfunc="size")
-        im = ax.imshow(piv.to_numpy(), origin="lower", cmap="viridis_r", aspect="auto")
-        ax.set_xticks(range(piv.shape[1]), [f"{v:g}" for v in piv.columns])
-        ax.set_yticks(range(piv.shape[0]), [f"{v:g}" for v in piv.index])
-        for i in range(piv.shape[0]):
-            for j in range(piv.shape[1]):
-                v, n = piv.iat[i, j], cnt.iat[i, j]
-                if np.isfinite(v):
-                    ax.text(j, i, f"{v:.3f}\nn={int(n):,}", ha="center", va="center", fontsize=8, color="w")
-        ax.set_xlabel("log10 r_xy (r_vel = r_xy / 10)")
-        ax.set_ylabel("log10 r_z")
-        ax.set_title(f"Int{lv}: best score per R (m)")
-        fig.colorbar(im, ax=ax, shrink=0.8)
-    fig.suptitle("R search, joint with the biases (Q noise terms at THETA0)")
-    save(fig, fig_dir / "qr_search.png")
+def qr_search(levels, cand, fig_dir):
+    """Best score per (r_xy, r_z), one panel per r_vel value, one row per level."""
+    xs = sorted(cand["log_r_xy"].unique())
+    zs = sorted(cand["log_r_z"].unique())
+    vs = sorted(cand["log_r_vel"].unique())
+    fig, axes = plt.subplots(len(levels), len(vs), figsize=(4.6 * len(vs), 3.9 * len(levels)), squeeze=False)
+    for row, (lv, t) in zip(axes, levels.items()):
+        ok = t[t["ok"]]
+        vmin, vmax = (ok["score"].min(), ok["score"].max()) if len(ok) else (0, 1)
+        for ax, v in zip(row, vs):
+            sub = t[t["log_r_vel"] == v]
+            piv = sub.pivot_table(index="log_r_z", columns="log_r_xy", values="score", aggfunc="min").reindex(
+                index=zs, columns=xs)
+            cnt = sub.pivot_table(index="log_r_z", columns="log_r_xy", values="score", aggfunc="size").reindex(
+                index=zs, columns=xs)
+            im = ax.imshow(piv.to_numpy(dtype=float), origin="lower", cmap="viridis_r", aspect="auto",
+                           vmin=vmin, vmax=min(vmax, np.nanpercentile(ok["score"], 99)) if len(ok) else vmax)
+            ax.set_xticks(range(len(xs)), [f"{x:g}" for x in xs])
+            ax.set_yticks(range(len(zs)), [f"{z:g}" for z in zs])
+            for i in range(len(zs)):
+                for j in range(len(xs)):
+                    val, n = piv.iat[i, j], cnt.iat[i, j]
+                    if np.isfinite(val):
+                        ax.text(j, i, f"{val:.3f}\nn={int(n):,}", ha="center", va="center", fontsize=7, color="w")
+            ax.set_xlabel("log10 r_xy")
+            ax.set_ylabel("log10 r_z")
+            ax.set_title(f"Int{lv}, log10 r_vel = {v:g}: best score (m)", fontsize=9)
+        fig.colorbar(im, ax=list(row), shrink=0.8)
+    fig.suptitle("R search, joint with the biases (Q noise terms at THETA0); blank = no candidate at that level")
+    fig.savefig(fig_dir / "qr_search.png", dpi=150)
+    plt.close(fig)
+    print(f"wrote {fig_dir / 'qr_search.png'}")
 
 
 def best_so_far(curve, stages, fig_dir):
@@ -214,9 +235,10 @@ def comparison(hisa, bench, fig_dir):
             f = "{:,.0f}" if c in ints else "{:.3f}"
             cells.append("–" if pd.isna(v) else f.format(v) + ("" if pd.isna(s) or s == 0 else " ± " + f.format(s)))
         lines.append(f"| {name} | {int(r['runs'])} | " + " | ".join(cells) + " |")
+    schedule = " → ".join(f"Int{lv}" for lv in json.loads((hisa / "config_snapshot.json").read_text())["config"]["LEVELS"])
     note = ("\nGA, PSO, DE and GWO: 7-D log-variance decision vector, 10,000 canonical (Int1) evaluations "
             "per seed, 5 seeds. HISA: 6 initial biases + R (Q noise at THETA0), one deterministic run, "
-            "Int25 → Int10 → Int1. Decision-vector dimensionality and literal evaluation counts differ; "
+            f"{schedule}. Decision-vector dimensionality and literal evaluation counts differ; "
             "compare the final metrics (all from the filterpy reference) and the measured workload and time.\n")
     (hisa / "comparison_with_benchmark.md").write_text("\n".join(lines) + "\n" + note, encoding="utf-8")
     print(f"wrote {hisa / 'comparison_with_benchmark.md'}")
@@ -243,12 +265,12 @@ def main(hisa, bench=None):
     fig_dir.mkdir(exist_ok=True)
     snap = json.loads((hisa / "config_snapshot.json").read_text())
     levels = {lv: read_level(hisa, lv) for lv in snap["config"]["LEVELS"]}
-    cand = pd.read_csv(hisa / "candidates_all.csv.gz")
+    cand = read_table(hisa, "candidates_all")
     stages = pd.read_csv(hisa / "stage_summary.csv")
     score_vs_iteration(levels, fig_dir)
     rho = stage_progression(levels, fig_dir)
     bias_distributions(cand, levels, fig_dir)
-    qr_search(levels, fig_dir)
+    qr_search(levels, cand, fig_dir)
     best_so_far(pd.read_csv(hisa / "best_so_far.csv"), stages, fig_dir)
     ekf_error(pd.read_csv(hisa / "ekf_error_timeseries.csv"), fig_dir)
     (fig_dir / "screening_rank_correlation.json").write_text(json.dumps(rho, indent=2))
