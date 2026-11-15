@@ -71,14 +71,14 @@ costs = cost_fn.evaluate_many(population)         # 200 candidates -> one batche
 
 ## Results summary
 
-Two runs on one RTX 4060 Laptop GPU, both on the complete ETH Zurich flight. All numbers below are final values re-scored by the filterpy reference filter. The full files are on the [`results` branch](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/tree/results/results).
+GPU benchmark on one RTX 4060 Laptop GPU, on the complete ETH Zurich flight. All numbers below are final values re-scored by the filterpy reference filter. The full files are on the [`results` branch](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/tree/results/results).
 
 - **GPU benchmark** (`results/benchmark_20261114_233504/`): GA, PSO, DE and GWO, population 200, 10,000 evaluations per seed, seeds 1–5, 7-D log-variance decision vector.
-- **HISA** (`results/HISA/`): one deterministic coarse-to-fine run over 746,496 joint initial-bias + R candidates (Int25 → Int10 → Int1), with Q at `THETA0`.
+- **HISA** is being upgraded (27 R combinations, Int50 → Int1; see the `hisa` branch). Its results will be added here once the new run is done.
 
 ### Headline numbers
 
-Mean ± std over 5 seeds (HISA: one run). Raw GPS is 3.604 m.
+Mean ± std over 5 seeds. Raw GPS is 3.604 m.
 
 | Method | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | Robustness mean ΔRMSE_h (m) | Evals to 99 % of improvement | EKF steps | Wall clock |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -87,11 +87,10 @@ Mean ± std over 5 seeds (HISA: one run). Raw GPS is 3.604 m.
 | **PSO** | **3.499 ± 0.001** | **−0.276** | **−0.105** | 3.68 ± 0.32 | +0.373 ± 0.010 | 6,690 ± 1,660 | 4.1 × 10⁸ per seed | 11.8 min per seed |
 | DE | 3.538 ± 0.012 | −0.237 | −0.066 | 2.75 ± 0.84 | +0.282 ± 0.014 | 7,672 ± 1,458 | 4.1 × 10⁸ per seed | 11.8 min per seed |
 | **GWO** | **3.501 ± 0.001** | **−0.274** | **−0.103** | 3.79 ± 0.13 | +0.381 ± 0.027 | **5,726 ± 1,564** | 4.1 × 10⁸ per seed | 11.8 min per seed |
-| HISA | 3.740 | −0.036 | +0.136 | 3.25 | **+0.032** | – | 2.3 × 10⁹ | 45.2 min |
 
 ### Best values found
 
-The best seed of each optimizer, and the HISA winner. Values are log10 of the noise densities and variances.
+The best seed of each optimizer. Values are log10 of the noise densities and variances.
 
 | Method (seed) | RMSE_h (m) | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` | Mean NIS | Robustness mean / max ΔRMSE_h (m) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
@@ -100,18 +99,14 @@ The best seed of each optimizer, and the HISA winner. Values are log10 of the no
 | **PSO (seed 5)** | **3.499** | 0.18 | −6.00 | −7.59 | −10.00 | −0.41 | 2.74 | 2.00 | 3.85 | +0.377 / +0.746 |
 | DE (seed 4) | 3.520 | 0.35 | −5.88 | −5.02 | −10.35 | −0.50 | 3.50 | 1.80 | 2.98 | +0.303 / +0.621 |
 | GWO (seed 4) | 3.499 | 0.20 | −6.00 | −6.69 | −10.01 | −0.38 | 1.41 | 1.78 | 3.79 | +0.364 / +0.736 |
-| HISA | 3.740 | 0.20 | −3.00 | −5.00 | −8.00 | 0.00 | 0.50 | −1.00 | 3.25 | +0.032 / +0.061 |
-
-HISA winner's initial biases: $b_a$ = (−0.1, +0.1, −0.1) m/s², $b_g$ = (−0.001, +0.1, −0.1) rad/s. Its Q noise terms are `THETA0` by design.
 
 ### What the results show
 
 1. **PSO and GWO are the most accurate.** Both reach 3.499–3.501 m with almost no spread between seeds, 0.276 m better than the baseline EKF and 0.105 m better than raw GPS. GWO converges fastest (median 5,401 evaluations to 99 % of its improvement). GA and DE end 0.04–0.05 m higher and vary more between seeds.
-2. **Accuracy is bought with robustness.** All four optimizers lower `r_xy` below 1 m² and so track GPS position more tightly. Under 2 m of added GPS noise their RMSE rises by 0.62–0.73 m, against 0.05 m for the baseline. HISA keeps the baseline's robustness (+0.032 m) but gains only 0.036 m of accuracy.
+2. **Accuracy is bought with robustness.** All four optimizers lower `r_xy` below 1 m² and so track GPS position more tightly. Under 2 m of added GPS noise their RMSE rises by 0.62–0.73 m, against 0.05 m for the baseline.
 3. **The optimizers push several parameters to the search bounds.** `log_q_gyro` = −6 is its lower bound for GA, PSO and GWO (DE: −5.88), and `log_r_vel` approaches its upper bound of 2 (PSO reaches 2.00), so GPS velocity is almost ignored. Wider bounds could move the optimum further.
-4. **HISA's search space misses the accurate region.** The filter re-estimates the initial biases within seconds, so all 7,465 Int1 finalists lie within 0.025 m of each other. Every finalist has `r_xy` = 1 m², the lowest value on HISA's grid, while `r_vel = r_xy/10` and the fixed Q exclude what the other optimizers found. Among the finalists, Int25 rank does not predict Int1 rank (Spearman ≈ 0.00).
-5. **Compute.** Each population optimizer used exactly 10,000 evaluations per seed (4.1 × 10⁸ EKF steps, 11.8 min on the GPU). HISA used 828,611 literal evaluations, 44,790 Int1-normalized, and 2.3 × 10⁹ EKF steps in 45 min: about 1.15 × the work of all five seeds of one optimizer.
-6. **Batched GPU evaluation matches the CPU reference:** within 7.4 × 10⁻⁸ m on the benchmark's 200-candidate check, and within 5.6 × 10⁻¹⁰ m on HISA's checks.
+4. **Compute.** Each optimizer used exactly 10,000 evaluations per seed (4.1 × 10⁸ EKF steps, 11.8 min on the GPU, about 61 min for all five seeds).
+5. **Batched GPU evaluation matches the CPU reference** within 7.4 × 10⁻⁸ m on the benchmark's 200-candidate check.
 
 ### Graphs
 
@@ -126,24 +121,6 @@ HISA winner's initial biases: $b_a$ = (−0.1, +0.1, −0.1) m/s², $b_g$ = (−
 **4D response: accuracy × robustness × convergence, coloured by compute** (interactive version: [response_4d.html](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/blob/results/results/benchmark_20261114_233504/response_4d.html), download it and open it in a browser)
 
 ![4D response](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/benchmark_20261114_233504/response_4d.png)
-
-**HISA against the benchmark optimizers (marker size ∝ measured wall clock)**
-
-![HISA comparison](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/comparison.png)
-
-**HISA: Int25 → Int10 → Int1 progression and screening fidelity**
-
-![HISA stage progression](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/stage_progression.png)
-
-**HISA: best score for each R combination at each level**
-
-![HISA R search](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/qr_search.png)
-
-**Whole-flight horizontal error: raw GPS, baseline EKF, HISA winner**
-
-![EKF error comparison](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/ekf_error_comparison.png)
-
-More HISA figures (score against iteration, bias distributions, best-so-far) are in [`results/HISA/figures/`](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/tree/results/results/HISA/figures).
 
 ## Reference results
 
@@ -381,9 +358,13 @@ Optimizers are compared on four dimensions, always in this order:
 
 $\text{RMSE}_{h,\text{whole}}$ is the primary metric. Two comparisons are always reported separately:
 
-$$\Delta\text{RMSE}_{EKF} = \text{RMSE}_{optimized} - \text{RMSE}_{baseline} \qquad (\texttt{delta\_vs\_baseline}, \texttt{improvement\_vs\_baseline\_pct})$$
+$$\Delta\text{RMSE}_{EKF} = \text{RMSE}_{optimized} - \text{RMSE}_{baseline}$$
 
-$$\Delta\text{RMSE}_{GPS} = \text{RMSE}_{optimized} - \text{RMSE}_{GPS} \qquad (\texttt{delta\_vs\_gps})$$
+reported as `delta_vs_baseline` and `improvement_vs_baseline_pct`, and
+
+$$\Delta\text{RMSE}_{GPS} = \text{RMSE}_{optimized} - \text{RMSE}_{GPS}$$
+
+reported as `delta_vs_gps`.
 
 An optimizer that improves on the baseline EKF but has $\Delta\text{RMSE}_{GPS} > 0$ is still worse than raw GPS and is not described as improving overall navigation. Secondary diagnostics: `rmse_v`, `rmse_3d`, `mean_nis`.
 
@@ -393,7 +374,11 @@ An optimizer that improves on the baseline EKF but has $\Delta\text{RMSE}_{GPS} 
 
 The tuned theta is held fixed. For each perturbation in `PERTURBATIONS` the complete flight is run again, and
 
-$$\Delta\text{RMSE}_h = \text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}, \qquad \Delta\text{RMSE}_{h,\%} = 100\,\frac{\text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}}{\text{RMSE}_{h,\text{clean}}}$$
+$$\Delta\text{RMSE}_h = \text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}$$
+
+and, in percent (`delta_pct_<perturbation>`),
+
+$$\Delta\text{RMSE}_{h,\text{rel}} = 100\,\frac{\text{RMSE}_{h,\text{perturbed}} - \text{RMSE}_{h,\text{clean}}}{\text{RMSE}_{h,\text{clean}}}$$
 
 Smaller is better; $\approx 0$ means little degradation. Both RMSE values cover the entire flight. `delta_rmse_mean` (mean over the perturbations) is the summary score and `delta_rmse_max` is the worst case.
 
