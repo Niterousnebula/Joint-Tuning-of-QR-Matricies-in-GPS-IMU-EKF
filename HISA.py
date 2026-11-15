@@ -1,17 +1,19 @@
 """Heuristic Informed Search Algorithm (HISA): joint initial-bias + R search, coarse to fine.
 
-    python HISA.py                       # full search -> results/HISA/
-    python HISA.py --limit 2000 --out results/HISA_smoke   # every k-th candidate, quick check
+    python HISA.py                       # full search on the GPU -> results/HISA/
+    python HISA.py --limit 20000 --out results/HISA_smoke   # evenly spaced subset, quick check
 
 Pipeline (see HISA_config.py and the README):
 
     signed log grid +-10^e, e in {-3..2}, zero excluded        12^6 = 2,985,984 bias patterns
     accelerometer axes in one decade, gyro unrestricted, all signs   -> 82,944 bias candidates
-    x 9 R combinations (r_xy, r_z; r_vel = r_xy / 10), searched jointly -> 746,496 candidates
-    Int25: all candidates  -> keep best 10 %
-    Int10: survivors       -> keep best 10 %
+    x 27 R combinations (r_xy, r_z, r_vel, 3 values each, independent), searched jointly
+                                                                     -> 2,239,488 candidates
+    Int50: all candidates  -> keep the best 5,210 (the Int50 winner always among them)
     Int1:  survivors (canonical filter and fitness) -> final winner
+    Int1-equivalent cost: 2,239,488 / 50 + 5,210 = 49,999.76 <= 50,000
 
+Every level runs on the GPU (ekf.gpu.GpuEvaluator), the whole batch of candidates at once.
 IntN integrates every N IMU intervals into one prediction and keeps the last GPS fix of each
 block; Int1 is the canonical run. Scores are only compared within one level. The incumbent
 (best of the previous level) is re-evaluated first on the next level. The Int1 winner is then
@@ -61,12 +63,12 @@ def build_candidates():
     """All admissible joint candidates, in a fixed order (candidate_id = row index)."""
     accel, gyro = admissible_magnitudes()
     signs = list(itertools.product(cfg.BIAS_SIGNS, repeat=6))
-    r_grid = list(itertools.product(cfg.R_LOG_XY, cfg.R_LOG_Z))
+    r_grid = list(itertools.product(cfg.R_LOG_XY, cfg.R_LOG_Z, cfg.R_LOG_VEL))
     ia, ig, isg, ir = (a.ravel() for a in np.meshgrid(np.arange(len(accel)), np.arange(len(gyro)),
                                                        np.arange(len(signs)), np.arange(len(r_grid)),
                                                        indexing="ij"))
-    e = np.hstack([np.asarray(accel)[ia], np.asarray(gyro)[ig]]).astype(int)
-    s = np.asarray(signs)[isg].astype(int)
+    e = np.hstack([np.asarray(accel)[ia], np.asarray(gyro)[ig]]).astype(np.int8)
+    s = np.asarray(signs)[isg].astype(np.int8)
     r = np.asarray(r_grid)[ir]
     cand = pd.DataFrame(e, columns=EXP_NAMES)
     for name, col in zip(SIGN_NAMES, s.T):
@@ -74,8 +76,7 @@ def build_candidates():
     bias = s * 10.0 ** e
     for name, col in zip(BIAS_NAMES, bias.T):
         cand[name] = col
-    cand["log_r_xy"], cand["log_r_z"] = r[:, 0], r[:, 1]
-    cand["log_r_vel"] = r[:, 0] + cfg.R_VEL_OFFSET
+    cand["log_r_xy"], cand["log_r_z"], cand["log_r_vel"] = r[:, 0], r[:, 1], r[:, 2]
     for name in ("r_xy", "r_z", "r_vel"):
         cand[name] = 10.0 ** cand[f"log_{name}"]
     cand.insert(0, "candidate_id", np.arange(len(cand)))
@@ -167,6 +168,34 @@ def cpu_check(stream, x0, cand):
     return np.array(rows, dtype=float)
 
 
+def write_table(df, out_dir, base):
+    """Write <base>.csv (gzip when large); split into parts if a file would exceed MAX_FILE_MB."""
+    gz = len(df) > 100_000
+    path = out_dir / (base + (".csv.gz" if gz else ".csv"))
+    df.to_csv(path, index=False, float_format="%.10g")
+    size_mb = path.stat().st_size / 2**20
+    if size_mb <= cfg.MAX_FILE_MB:
+        return [path.name]
+    path.unlink()
+    n_parts = int(np.ceil(size_mb / (0.8 * cfg.MAX_FILE_MB)))
+    names = []
+    for i, part in enumerate(np.array_split(np.arange(len(df)), n_parts), start=1):
+        p = out_dir / f"{base}_part{i:02d}.csv.gz"
+        df.iloc[part].to_csv(p, index=False, float_format="%.10g")
+        names.append(p.name)
+    return names
+
+
+def n_retained(level, n, n_full):
+    """How many candidates go on to the next level (scaled down for a --limit subset)."""
+    if level == cfg.LEVELS[-1]:
+        return 0
+    keep = cfg.RETAIN[level]
+    if n < n_full:                                   # smoke test on a subset
+        keep = max(2, int(round(keep * n / n_full)))
+    return min(keep, n)
+
+
 def rank(scores, ids):
     """Rank 1 = best; ties broken by candidate_id so the order is reproducible."""
     order = np.lexsort((ids, scores))
@@ -198,7 +227,16 @@ def run(out_dir, limit=None):
         counts["smoke_limit"] = limit
     print(f"HISA: {len(cand):,} admissible joint candidates "
           f"({counts['bias_candidates']:,} bias x {counts['r_combinations']} R)", flush=True)
-    cand.to_csv(out_dir / "candidates_all.csv.gz", index=False)
+    n_full = counts["joint_candidates"]
+    planned, n = 0.0, n_full
+    for lv in cfg.LEVELS:
+        planned += n / lv
+        n = cfg.RETAIN.get(lv, 0)
+    counts["planned_int1_equivalent"] = planned
+    print(f"Planned Int1-equivalent cost: {planned:,.2f} (budget {cfg.INT1_EQUIVALENT_BUDGET:,})", flush=True)
+    if planned > cfg.INT1_EQUIVALENT_BUDGET:
+        raise SystemExit("HISA_config: the schedule exceeds INT1_EQUIVALENT_BUDGET")
+    files = {"candidates_all": write_table(cand, out_dir, "candidates_all")}
 
     pool = cand
     stages, curve, validation = [], [], []
@@ -210,8 +248,8 @@ def run(out_dir, limit=None):
         print(f"\n=== Stage {stage}: Int{level} | {len(pool):,} candidates | "
               f"{n_pred:,} predictions + {n_upd:,} GPS updates per candidate ===", flush=True)
 
-        # Evaluation order: Int25 by candidate_id; later levels by previous rank, so the
-        # incumbent is re-evaluated first on the new level.
+        # Evaluation order: first level by candidate_id; later levels by previous rank, so
+        # the incumbent is re-evaluated first on the new level. All on the GPU.
         ev = GpuEvaluator(stream, x0=x0)
         t0 = time.perf_counter()
         res = evaluate_level(ev, pool, cfg.BATCH[level])
@@ -231,17 +269,18 @@ def run(out_dir, limit=None):
         new_best = np.r_[True, running[1:] < running[:-1]]
         table["is_best_so_far"] = new_best
         table["best_so_far"] = running
-        n_keep = int(round(cfg.RETAIN_FRACTION * len(table))) if level != cfg.LEVELS[-1] else 0
+        n_keep = n_retained(level, len(table), n_full if stage == 1 else len(table))
         table["retained"] = table["rank"] <= n_keep
         best = table.iloc[order[0]]
+        if n_keep:
+            assert bool(best["retained"]), "the level winner must go on to the next level"
 
         inc_score = np.nan
         if incumbent is not None:
             inc_score = float(table.loc[table["candidate_id"] == incumbent, "score"].iloc[0])
             print(f"  incumbent {incumbent} re-evaluated on Int{level}: {inc_score:.4f} m", flush=True)
 
-        name = f"int{level}_results.csv" + (".gz" if len(table) > 100_000 else "")
-        table.to_csv(out_dir / name, index=False)
+        files[f"int{level}_results"] = write_table(table, out_dir, f"int{level}_results")
 
         # Best-so-far curve (change points only), with both workload measures on the x axis
         for _, r in table[table["is_best_so_far"]].iterrows():
@@ -282,6 +321,7 @@ def run(out_dir, limit=None):
         incumbent = int(best["candidate_id"])
         if n_keep:
             pool = table.iloc[order[:n_keep]][cand.columns].reset_index(drop=True)
+            assert pool["candidate_id"].iloc[0] == incumbent, "the incumbent must lead the next level"
 
     t_search = time.perf_counter() - t_start
     val = pd.DataFrame(validation)
@@ -327,9 +367,7 @@ def run(out_dir, limit=None):
                 "search_vs_final_diff": result["rmse_h"] - float(st["best_score"].iloc[-1]),
                 "int1_normalized_evals": norm_total,
                 "ekf_steps_total": int(st["ekf_steps_total"].sum()),
-                "literal_int25": int(st["literal_evals"].iloc[0]),
-                "literal_int10": int(st["literal_evals"].iloc[1]) if len(st) > 1 else 0,
-                "literal_int1": int(st["literal_evals"].iloc[-1])})
+                **{f"literal_int{int(s['integration_level'])}": int(s["literal_evals"]) for _, s in st.iterrows()}})
     pd.DataFrame([row]).to_csv(out_dir / "runs.csv", index=False)
     final = {"candidate_id": incumbent, **win.to_dict(), "int1_score_gpu": float(st["best_score"].iloc[-1]),
              "int1_score_cpu": result["rmse_h"], "rmse_v": result["rmse_v"], "rmse_3d": result["rmse_3d"],
@@ -362,7 +400,10 @@ def run(out_dir, limit=None):
                                f"{lv} IMU intervals per prediction (dt-weighted mean), last GPS fix per block"
                                for lv in cfg.LEVELS},
                 "workload": {"literal_evals": literal_total, "int1_normalized_evals": norm_total,
+                             "int1_equivalent_budget": cfg.INT1_EQUIVALENT_BUDGET,
+                             "within_budget": bool(norm_total <= cfg.INT1_EQUIVALENT_BUDGET),
                              "ekf_steps_total": int(st["ekf_steps_total"].sum())},
+                "files": files,
                 "timing_s": {"search": t_search, "final_rescore": t_final, "total": t_total},
                 "validation": {"passed": val_ok, "max_diff_score": float(val["diff_score"].max()),
                                "n_candidates": len(val), "tol_rmse": TOL_RMSE, "tol_nis_rel": TOL_NIS_REL},

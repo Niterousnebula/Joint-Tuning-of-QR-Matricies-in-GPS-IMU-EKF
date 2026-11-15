@@ -26,44 +26,53 @@ Changes to the data, the filter or the fitness function go into `main` first and
 
 ## HISA: Heuristic Informed Search Algorithm (`hisa` branch)
 
-HISA is a deterministic coarse-to-fine grid search. Each candidate is one joint combination of the six **initial bias states** and **R**, scored by the same EKF and the same whole-flight RMSE_h. The Q noise densities stay at `THETA0`. The code is `HISA.py`, the settings are in `HISA_config.py`, and `plot_hisa.py` draws the figures from the CSV outputs only.
+HISA is a deterministic coarse-to-fine grid search. Each candidate is one joint combination of the six **initial bias states** and **R**, scored by the same EKF and the same whole-flight RMSE_h. The Q noise densities stay at `THETA0`. Every level runs on the GPU: each batch of candidates is one batched EKF pass (`ekf/gpu.py`). The code is `HISA.py`, the settings are in `HISA_config.py`, and `plot_hisa.py` draws the figures from the CSV outputs only.
 
 ```text
-signed log grid ±10^e, e ∈ {−3,…,2}, zero excluded          4,826,809 → 2,985,984 bias patterns
-accelerometer axes within 0.5 decade (one decade); gyro free; all 64 signs   → 82,944 bias candidates
-× R: log10 r_xy ∈ {0,1,2}, log10 r_z ∈ {0.5,1.5,2.5}, r_vel = r_xy/10 (9)  → 746,496 joint candidates
-Int25: all 746,496        → best 10 % (74,650)
-Int10: 74,650             → best 10 % (7,465)
-Int1:  7,465 (canonical filter and fitness) → winner
+signed log grid ±10^e, e ∈ {−3,…,2}, zero excluded            4,826,809 → 2,985,984 bias patterns
+accelerometer axes within 0.5 decade (one decade); gyro free; all 64 signs     → 82,944 bias candidates
+× R: 3 independent values each for r_xy, r_z, r_vel (27)                     → 2,239,488 joint candidates
+Int50: all 2,239,488     → keep the best 5,210 (the Int50 winner always kept)
+Int1:  5,210 (canonical filter and fitness) → winner
 ```
 
 | Item | Definition |
 |---|---|
 | Bias values | Set the filter's initial `b_a`, `b_g` (`x0[10:16]`); the EKF keeps estimating them |
-| R | Searched jointly with the biases; never searched after the bias search or fixed at `THETA0` |
+| R | Searched jointly with the biases. log10 values (lower bound, `THETA0`, upper bound of the shared search bounds): `r_xy` ∈ {−1, 0, 1} m², `r_z` ∈ {−0.5, 1.5, 3.5} m², `r_vel` ∈ {−2, 0, 2} (m/s)², all independent |
 | IntN | Every N IMU intervals are integrated into one prediction (dt-weighted mean of accel and gyro, dt = block length), followed by the last GPS fix of the block. The filter is unchanged; only its input stream is coarser. Int1 is the canonical run |
 | Ranking | Whole-flight RMSE_h at that level; ties broken by `candidate_id`; scores are compared only within one level |
-| Best so far | The best of each level is evaluated first on the next level, then compared with that level's candidates |
+| Best so far | The Int50 winner is always among the 5,210 kept and is evaluated first at Int1, then compared with the other Int1 candidates |
 | Final metrics | The Int1 winner is re-scored by the filterpy reference with the benchmark's RMSE_h, robustness and NIS |
 | Validation | At every level, the best, the worst and a spread of candidates are re-scored by filterpy on the same stream; the run fails if any difference exceeds `TOL_RMSE` |
 
 **Workload is reported in three separate ways, and they are never mixed:**
 
-| Measure | Int25 | Int10 | Int1 | Total |
-|---|---:|---:|---:|---:|
-| Literal candidate evaluations | 746,496 | 74,650 | 7,465 | 828,611 |
-| Int1-normalized cost ($n/N$) | 29,859.84 | 7,465 | 7,465 | 44,789.84 |
-| EKF steps per candidate (predictions + GPS updates) | 1,082 + 1,082 | 2,705 + 2,705 | 27,047 + 13,529 | |
+| Measure | Int50 | Int1 | Total |
+|---|---:|---:|---:|
+| Literal candidate evaluations | 2,239,488 | 5,210 | 2,244,698 |
+| Int1-equivalent cost ($n/N$) | 44,789.76 | 5,210 | 49,999.76 (budget 50,000) |
+| EKF steps per candidate (predictions + GPS updates) | 541 + 541 | 27,047 + 13,529 | |
 
-The spec's $1/N$ normalization counts predictions only. Coarse streams keep one GPS update per block, so the measured step count of an Int25 evaluation is about 1/19 of an Int1 evaluation, not 1/25. `stage_summary.csv` records both, together with wall-clock time.
+The $1/N$ normalization counts predictions only. Coarse streams keep one GPS update per block, so the measured step count of an Int50 evaluation is about 1/37 of an Int1 evaluation, not 1/50. `stage_summary.csv` records both, together with wall-clock time. `HISA.py` checks the planned Int1-equivalent cost against `INT1_EQUIVALENT_BUDGET` before it starts.
+
+**Running it** (from the repository root, on a CUDA GPU):
 
 ```bash
-python HISA.py                                   # -> results/HISA/  (refuses to overwrite)
-python HISA.py --limit 3000 --out results/HISA_smoke
-python plot_hisa.py --hisa results/HISA --benchmark results/benchmark_<stamp>
+python -u HISA.py --limit 20000 --out results/HISA_smoke
 ```
 
-Outputs: `candidates_all.csv.gz`, `int25_results.csv.gz`, `int10_results.csv`, `int1_results.csv`, `best_so_far.csv`, `final_best.csv`, `stage_summary.csv`, `config_snapshot.json`, `runs.csv` (benchmark schema), `ekf_error_timeseries.csv`, `validation/`, and `figures/`. The two largest tables are gzip-compressed (pandas reads them directly) to stay under GitHub's file-size limit.
+```bash
+python -u HISA.py
+```
+
+```bash
+python plot_hisa.py --hisa results/HISA --benchmark results/benchmark_20261114_233504
+```
+
+The first command is a quick check on 20,000 evenly spaced candidates (the 5,210 kept are scaled down to match). The second is the full search, writing to `results/HISA/`; it refuses to overwrite an existing folder. From the speed of the previous HISA run on the RTX 4060, the full search should take about 50 minutes (about 45 at Int50, 4 at Int1, plus validation and the final re-scoring). That is an estimate, not a measurement. The third command draws the figures and the side-by-side table with the GPU benchmark.
+
+Outputs: `candidates_all.csv.gz`, `int50_results.csv.gz`, `int1_results.csv`, `best_so_far.csv`, `final_best.csv`, `stage_summary.csv`, `config_snapshot.json`, `runs.csv` (benchmark schema), `ekf_error_timeseries.csv`, `validation/` and `figures/`. Large tables are gzip-compressed (pandas reads them directly) and split into `_partNN` files if one would exceed 90 MB, to stay under GitHub's 100 MB limit.
 
 **Comparison with GA/PSO/DE/GWO.** The methods differ in decision vector (6 initial biases + R vs 7 log-variances) and in literal evaluation counts, and HISA runs once because it is deterministic. The fair comparison is therefore the final metrics, all computed by the filterpy reference, together with the measured workload and wall-clock time on the same GPU.
 
