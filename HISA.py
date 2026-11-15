@@ -196,6 +196,40 @@ def n_retained(level, n, n_full):
     return min(keep, n)
 
 
+def level_summary(stage, level, table, incumbent, t_level, n_pred, n_upd, literal_total, norm_total):
+    """stage_summary row and best-so-far change points for one evaluated level."""
+    order = np.lexsort((table["candidate_id"].to_numpy(), table["score"].to_numpy()))
+    best = table.iloc[order[0]]
+    inc_score = (float(table.loc[table["candidate_id"] == incumbent, "score"].iloc[0])
+                 if incumbent is not None else np.nan)
+    row = {"stage": stage, "integration_level": level, "candidates_in": len(table),
+           "retained_out": int(table["retained"].sum()), "literal_evals": len(table),
+           "int1_normalized_cost": len(table) / level,
+           "predictions_per_candidate": n_pred, "gps_updates_per_candidate": n_upd,
+           "ekf_steps_total": len(table) * (n_pred + n_upd),
+           "failed_candidates": int((~table["ok"].astype(bool)).sum()),
+           "best_candidate_id": int(best["candidate_id"]), "best_score": float(best["score"]),
+           "incumbent_id": incumbent, "incumbent_score": inc_score, "wall_clock_s": t_level}
+    curve = [{"stage": stage, "integration_level": level, "eval_order": int(r["eval_order"]),
+              "literal_evals": literal_total + int(r["eval_order"]),
+              "int1_normalized": norm_total + r["eval_order"] / level,
+              "candidate_id": int(r["candidate_id"]), "score": r["score"],
+              "best_so_far_in_level": r["best_so_far"]}
+             for _, r in table[table["is_best_so_far"].astype(bool)].iterrows()]
+    return row, curve, int(best["candidate_id"]), inc_score
+
+
+def read_table(out_dir, base):
+    """Read a table written by write_table (plain, gzip, or split into parts)."""
+    for name in (f"{base}.csv", f"{base}.csv.gz"):
+        if (out_dir / name).exists():
+            return pd.read_csv(out_dir / name), [out_dir / name]
+    parts = sorted(out_dir.glob(f"{base}_part*.csv.gz"))
+    if not parts:
+        raise FileNotFoundError(f"{base} not found in {out_dir}")
+    return pd.concat([pd.read_csv(q) for q in parts], ignore_index=True), parts
+
+
 def rank(scores, ids):
     """Rank 1 = best; ties broken by candidate_id so the order is reproducible."""
     order = np.lexsort((ids, scores))
@@ -275,20 +309,13 @@ def run(out_dir, limit=None):
         if n_keep:
             assert bool(best["retained"]), "the level winner must go on to the next level"
 
-        inc_score = np.nan
+        st_row, st_curve, _, inc_score = level_summary(stage, level, table, incumbent, t_level, n_pred, n_upd,
+                                                       literal_total, norm_total)
         if incumbent is not None:
-            inc_score = float(table.loc[table["candidate_id"] == incumbent, "score"].iloc[0])
             print(f"  incumbent {incumbent} re-evaluated on Int{level}: {inc_score:.4f} m", flush=True)
 
         files[f"int{level}_results"] = write_table(table, out_dir, f"int{level}_results")
-
-        # Best-so-far curve (change points only), with both workload measures on the x axis
-        for _, r in table[table["is_best_so_far"]].iterrows():
-            curve.append({"stage": stage, "integration_level": level, "eval_order": int(r["eval_order"]),
-                          "literal_evals": literal_total + int(r["eval_order"]),
-                          "int1_normalized": norm_total + r["eval_order"] / level,
-                          "candidate_id": int(r["candidate_id"]), "score": r["score"],
-                          "best_so_far_in_level": r["best_so_far"]})
+        curve.extend(st_curve)                 # best-so-far change points, both workload measures
         literal_total += len(table)
         norm_total += len(table) / level
 
@@ -307,15 +334,7 @@ def run(out_dir, limit=None):
                                "reldiff_mean_nis": abs(r["mean_nis"] - c[3]) / abs(c[3]) if both else 0.0,
                                "gpu_ok": bool(r["ok"]), "cpu_ok": bool(c[4])})
 
-        stages.append({"stage": stage, "integration_level": level, "candidates_in": len(table),
-                       "retained_out": n_keep, "literal_evals": len(table),
-                       "int1_normalized_cost": len(table) / level,
-                       "predictions_per_candidate": n_pred, "gps_updates_per_candidate": n_upd,
-                       "ekf_steps_total": len(table) * (n_pred + n_upd),
-                       "failed_candidates": int((~table["ok"]).sum()),
-                       "best_candidate_id": int(best["candidate_id"]), "best_score": best["score"],
-                       "incumbent_id": incumbent, "incumbent_score": inc_score,
-                       "wall_clock_s": t_level})
+        stages.append(st_row)
         print(f"  best Int{level}: candidate {int(best['candidate_id'])}, score {best['score']:.4f} m; "
               f"{int((~table['ok']).sum()):,} diverged; {t_level:.0f} s", flush=True)
         incumbent = int(best["candidate_id"])
@@ -326,6 +345,16 @@ def run(out_dir, limit=None):
     t_search = time.perf_counter() - t_start
     val = pd.DataFrame(validation)
     val.to_csv(out_dir / "validation" / "validation_table.csv", index=False)
+    return finalize(out_dir, data, cand, counts, pd.DataFrame(stages), pd.DataFrame(curve), val, incumbent,
+                    literal_total, norm_total, files, started, {"search": t_search}, t_start=t_start)
+
+
+def finalize(out_dir, data, cand, counts, st, curve, val, incumbent, literal_total, norm_total, files,
+             started, timing, t_start=None, note=None):
+    """Validation verdict, filterpy re-score of the Int1 winner, and every summary file."""
+    import torch
+    from ekf.gpu import TOL_NIS_REL, TOL_RMSE
+
     val_ok = bool((val["gpu_ok"] == val["cpu_ok"]).all() and val["diff_score"].max() <= TOL_RMSE
                   and val["diff_rmse_v"].max() <= TOL_RMSE and val["diff_rmse_3d"].max() <= TOL_RMSE
                   and val["reldiff_mean_nis"].max() <= TOL_NIS_REL)
@@ -342,10 +371,11 @@ def run(out_dir, limit=None):
     rmse_gps = ekf.gps_rmse(data)
     rmse_baseline = ekf.fitness(data, ekf.THETA0)
     t_final = time.perf_counter() - t0
-    t_total = time.perf_counter() - t_start
-    st = pd.DataFrame(stages)
+    timing["final_rescore"] = t_final
+    timing["total"] = (time.perf_counter() - t_start) if t_start is not None else timing["search"] + t_final
+    t_total = timing["total"]
     st.to_csv(out_dir / "stage_summary.csv", index=False)
-    pd.DataFrame(curve).to_csv(out_dir / "best_so_far.csv", index=False)
+    curve.to_csv(out_dir / "best_so_far.csv", index=False)
 
     row = {"optimizer": "HISA", "seed": cfg.SEED, **dict(zip(ekf.THETA_NAMES, theta)),
            **dict(zip(BIAS_NAMES, bias)),
@@ -404,7 +434,8 @@ def run(out_dir, limit=None):
                              "within_budget": bool(norm_total <= cfg.INT1_EQUIVALENT_BUDGET),
                              "ekf_steps_total": int(st["ekf_steps_total"].sum())},
                 "files": files,
-                "timing_s": {"search": t_search, "final_rescore": t_final, "total": t_total},
+                "timing_s": timing,
+                "note": note,
                 "validation": {"passed": val_ok, "max_diff_score": float(val["diff_score"].max()),
                                "n_candidates": len(val), "tol_rmse": TOL_RMSE, "tol_nis_rel": TOL_NIS_REL},
                 "environment": {"python": platform.python_version(), "torch": torch.__version__,
@@ -421,9 +452,72 @@ def run(out_dir, limit=None):
     return out_dir
 
 
+def finish(out_dir):
+    """Complete a run whose search finished but whose final step did not.
+
+    Needs candidates_all, every int<N>_results table and validation/validation_table.csv.
+    Re-scores the Int1 winner with filterpy and writes stage_summary, best_so_far, runs,
+    final_best, ekf_error_timeseries and config_snapshot. Nothing is re-searched. The per-level
+    wall-clock times are taken from the files' modification times and are marked as such.
+    """
+    out_dir = Path(out_dir)
+    done = [f for f in ("stage_summary.csv", "runs.csv", "final_best.csv", "config_snapshot.json")
+            if (out_dir / f).exists()]
+    if done:
+        raise SystemExit(f"{out_dir} already has {done}; nothing to finish.")
+    data = ekf.load_data()
+    cand, cand_files = read_table(out_dir, "candidates_all")
+    _, counts = build_candidates()
+    if len(cand) != counts["joint_candidates"]:
+        counts["smoke_limit"] = len(cand)
+    planned, n = 0.0, counts["joint_candidates"]
+    for lv in cfg.LEVELS:
+        planned += n / lv
+        n = cfg.RETAIN.get(lv, 0)
+    counts["planned_int1_equivalent"] = planned
+    files = {"candidates_all": [f.name for f in cand_files]}
+    val_path = out_dir / "validation" / "validation_table.csv"
+    val = pd.read_csv(val_path)
+
+    t_prev = max(f.stat().st_mtime for f in cand_files)
+    t_first = t_prev
+    stages, curve = [], []
+    incumbent, literal_total, norm_total = None, 0, 0.0
+    for stage, level in enumerate(cfg.LEVELS, start=1):
+        table, paths = read_table(out_dir, f"int{level}_results")
+        files[f"int{level}_results"] = [q.name for q in paths]
+        n_pred, n_upd = stream_workload(integrated_stream(data, level))
+        t_file = max(q.stat().st_mtime for q in paths)
+        row, cur, incumbent_next, _ = level_summary(stage, level, table, incumbent, t_file - t_prev,
+                                                    n_pred, n_upd, literal_total, norm_total)
+        stages.append(row)
+        curve.extend(cur)
+        t_prev = t_file
+        incumbent = incumbent_next
+        literal_total += len(table)
+        norm_total += len(table) / level
+        print(f"Int{level}: {len(table):,} candidates, best {row['best_candidate_id']} "
+              f"({row['best_score']:.4f} m), ~{row['wall_clock_s'] / 60:.1f} min", flush=True)
+
+    t_search = val_path.stat().st_mtime - t_first
+    started = datetime.fromtimestamp(t_first).isoformat(timespec="seconds")
+    note = ("Completed with HISA.py --finish after the original run stopped during the final step. The "
+            "search tables and validation are from the original run. Per-level wall_clock_s and "
+            "timing_s.search come from file modification times (they include writing each level's table "
+            "and the validation checks; the time to build and write candidates_all is not included).")
+    return finalize(out_dir, data, cand, counts, pd.DataFrame(stages), pd.DataFrame(curve), val, incumbent,
+                    literal_total, norm_total, files, started, {"search": t_search, "source": "file mtimes"},
+                    note=note)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", default=cfg.OUTPUT_DIR)
     parser.add_argument("--limit", type=int, help="evaluate only this many evenly spaced candidates (smoke test)")
+    parser.add_argument("--finish", metavar="DIR",
+                        help="complete a run in DIR whose search finished but whose final step did not")
     a = parser.parse_args()
-    run(a.out, a.limit)
+    if a.finish:
+        finish(a.finish)
+    else:
+        run(a.out, a.limit)
