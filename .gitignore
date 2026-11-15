@@ -1,4 +1,16 @@
 __pycache__/
 *.pyc
 .venv/
+ekf_env/
 .ipynb_checkpoints/
+
+# Datasets: only the ones the pipeline marked ekf_ready (ETH, iNav-WHU) are kept, and they are
+# committed on the `data` branch, not on main. Everything else stays local.
+raw_data/*
+!raw_data/ETH/
+!raw_data/iNavWHU/
+# the unused TUM copy of the iNav-WHU ground truth
+raw_data/iNavWHU/*/*_trajectory.csv
+processed_data/*
+!processed_data/eth/
+!processed_data/inavwhu/
