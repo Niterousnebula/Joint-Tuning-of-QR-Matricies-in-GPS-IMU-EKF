@@ -1,0 +1,56 @@
+{
+  "id": "eth",
+  "label": "ETH Zurich GPS-IMU flight",
+  "source_files": [
+    "RawAccel ETH",
+    "RawGyro ETH",
+    "OnboardGPS ETH",
+    "GroundTruth ETH"
+  ],
+  "accel_rows": 27048,
+  "gyro_rows": 27048,
+  "imu_rows_matched": 27048,
+  "gps_origin_lat_lon_alt": [
+    47.3843551,
+    8.5451786,
+    465.164
+  ],
+  "gps_origin_note": "ENU origin is the first GPS fix (already applied in the source files)",
+  "gt_velocity": "not provided",
+  "t0_source_s": 7.290907,
+  "imu_samples": 27048,
+  "imu_dropped_invalid": 0,
+  "imu_dropped_outside_kept_segment": 0,
+  "imu_duration_s": 2713.50375,
+  "imu_rate_hz": 9.999999999997726,
+  "imu_max_gap_s": 1.1000000000001364,
+  "units": {
+    "time": "s",
+    "accel": "m/s^2",
+    "gyro": "rad/s",
+    "position": "m (ENU)",
+    "velocity": "m/s (ENU)"
+  },
+  "frames": "IMU in the sensor/body frame as logged; GPS and GT in ENU",
+  "gps_samples": 13530,
+  "gps_dropped": 0,
+  "gps_start_s": -0.08394000000000013,
+  "gps_end_s": 2713.33478,
+  "gt_samples": 2689,
+  "gt_dropped": 0,
+  "gt_start_s": 6.518221999999429,
+  "gt_end_s": 2709.8859560870865,
+  "start_specific_force_ms2": 9.033627207171772,
+  "ekf_ready": {
+    "ready": true,
+    "reasons": [],
+    "gps_channels": [
+      "e",
+      "n",
+      "u",
+      "ve",
+      "vn",
+      "vu"
+    ]
+  }
+}
