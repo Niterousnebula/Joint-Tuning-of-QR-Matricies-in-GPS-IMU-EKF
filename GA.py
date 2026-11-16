@@ -4,6 +4,7 @@ Run from the repository root:
     python GA.py
     python GA.py --max-evals 20 --seeds 0 --out results/GA_smoke
     python GA.py --backend cpu        # filterpy reference instead of the GPU batch
+    python GA.py --dataset inavwhu/street00
 
 Only this file and GA_config.py are GA-specific. The shared EKF and objective are
 imported from the existing `ekf` package and are not modified.
@@ -135,11 +136,10 @@ def run_ga(data, tracker, seed=0, population_size=None):
 
 
 def run_experiment(max_evals=None, seeds=None, out_dir=None,
-                   population_size=None, n_workers=None, backend=None, data=None):
+                   population_size=None, n_workers=None, backend=None, data=None, dataset=None):
     """Run configured independent seeds and save benchmark-compatible outputs."""
     max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
     seeds = tuple(cfg.SEEDS if seeds is None else seeds)
-    out_dir = Path(cfg.OUTPUT_DIR if out_dir is None else out_dir)
     population_size = int(
         cfg.POPULATION_SIZE if population_size is None else population_size
     )
@@ -153,9 +153,8 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
     if n_workers < 1:
         raise ValueError("n_workers must be at least 1")
 
-    if data is None:
-        print("Loading ETH flight data...")
-        data = ekf.load_data()
+    data, dataset, out_dir = ekf.prepare_run(data, dataset, out_dir, Path(cfg.OUTPUT_DIR).name)
+    print(f"Dataset: {dataset}; results -> {out_dir}")
 
     # Reference values are computed once per experiment, outside each GA budget.
     print("Computing baseline references...")
@@ -204,7 +203,8 @@ def main():
     parser.add_argument("--population-size", type=int, default=cfg.POPULATION_SIZE)
     parser.add_argument("--workers", type=int, default=cfg.N_WORKERS)
     parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
-    parser.add_argument("--out", default=cfg.OUTPUT_DIR)
+    parser.add_argument("--dataset", help="processed dataset id; asked for on a terminal if omitted")
+    parser.add_argument("--out", help="output folder (default: results/[<dataset>/]<NAME>)")
     args = parser.parse_args()
 
     run_experiment(
@@ -213,7 +213,8 @@ def main():
         out_dir=args.out,
         population_size=args.population_size,
         n_workers=args.workers,
-        backend=args.backend
+        backend=args.backend,
+        dataset=args.dataset
     )
 
 
