@@ -14,3 +14,7 @@ raw_data/iNavWHU/*/*_trajectory.csv
 processed_data/*
 !processed_data/eth/
 !processed_data/inavwhu/
+
+# run_all.py
+results/.run_all.lock
+results_smoke/
