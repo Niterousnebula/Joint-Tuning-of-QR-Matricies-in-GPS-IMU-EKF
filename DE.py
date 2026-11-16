@@ -5,6 +5,7 @@ Only DE.py and DE_config.py are optimizer-specific; the shared EKF, bounds and
 horizontal-RMSE objective are imported from `ekf`.
 Run from the repository root, e.g.:
     python DE.py --max-evals 40 --seeds 0 --out results/DE_smoke
+    python DE.py --dataset inavwhu/street00
 """
 import argparse
 from pathlib import Path
@@ -108,19 +109,17 @@ def run_de(tracker, seed=0, population_size=None, differential_weight=None, cros
 
 def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=None,
                    n_workers=None, differential_weight=None, crossover_rate=None,
-                   backend=None, data=None):
+                   backend=None, data=None, dataset=None):
     max_evals = int(cfg.MAX_EVALS if max_evals is None else max_evals)
     seeds = tuple(cfg.SEEDS if seeds is None else seeds)
-    out_dir = Path(cfg.OUTPUT_DIR if out_dir is None else out_dir)
     population_size = int(cfg.POPULATION_SIZE if population_size is None else population_size)
     n_workers = int(cfg.N_WORKERS if n_workers is None else n_workers)
     backend = cfg.BACKEND if backend is None else backend
     if max_evals < 1 or not seeds or n_workers < 1:
         raise ValueError("Require max_evals >= 1, at least one seed, and n_workers >= 1")
 
-    if data is None:
-        print("Loading ETH flight data...")
-        data = ekf.load_data()
+    data, dataset, out_dir = ekf.prepare_run(data, dataset, out_dir, Path(cfg.OUTPUT_DIR).name)
+    print(f"Dataset: {dataset}; results -> {out_dir}")
     print("Computing baseline references...")
     rmse_baseline = ekf.fitness(data, ekf.THETA0)
     rmse_gps = ekf.gps_rmse(data)
@@ -161,11 +160,12 @@ def main():
     parser.add_argument("--differential-weight", type=float, default=cfg.DIFFERENTIAL_WEIGHT)
     parser.add_argument("--crossover-rate", type=float, default=cfg.CROSSOVER_RATE)
     parser.add_argument("--backend", choices=ekf.BACKENDS, default=cfg.BACKEND)
-    parser.add_argument("--out", default=cfg.OUTPUT_DIR)
+    parser.add_argument("--dataset", help="processed dataset id; asked for on a terminal if omitted")
+    parser.add_argument("--out", help="output folder (default: results/[<dataset>/]<NAME>)")
     args = parser.parse_args()
     run_experiment(args.max_evals, args.seeds, args.out, args.population_size,
                    args.workers, args.differential_weight, args.crossover_rate,
-                   backend=args.backend)
+                   backend=args.backend, dataset=args.dataset)
 
 
 if __name__ == "__main__":
