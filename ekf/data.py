@@ -137,6 +137,26 @@ def results_dir(dataset, *parts):
     return base.joinpath(*parts)
 
 
+def prepare_run(data=None, dataset=None, out_dir=None, name="RUN"):
+    """The dataset and output folder for one optimizer run (shared by GA, PSO, DE and GWO).
+
+    With `data` given (e.g. by run_all.py) it is used as is; otherwise `dataset` is loaded,
+    asked for on a terminal if omitted. `out_dir` defaults to results_dir(dataset, name).
+    Returns (data, dataset, out_dir).
+    """
+    if data is None:
+        dataset = select_dataset(dataset)
+        try:
+            data = load_data(dataset)
+        except (DatasetNotReady, FileNotFoundError) as err:
+            raise SystemExit(f"error: {err}")
+    else:
+        dataset = data.get("dataset", DEFAULT_DATASET)
+    if out_dir is None:
+        out_dir = results_dir(dataset, name)
+    return data, dataset, Path(out_dir)
+
+
 def perturb(data, gps_sigma=0.0, vel_sigma=0.0, accel_sigma=0.0, gyro_sigma=0.0,
             gps_drop=0.0, seed=0):
     """Copy of `data` with extra white noise on the sensors and GPS fixes dropped at random.

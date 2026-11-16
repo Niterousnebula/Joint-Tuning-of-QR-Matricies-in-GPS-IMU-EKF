@@ -376,6 +376,13 @@ def gpu_evaluator(data, device="cuda", use_graphs=True):
     return _EVALUATORS[key][1]
 
 
+def clear_cache():
+    """Drop every cached evaluator and free its GPU memory (run_all.py calls it between datasets)."""
+    _EVALUATORS.clear()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+
 def compare_with_cpu(data, thetas, n_workers=1, device="cuda"):
     """Score the same candidates with the filterpy reference and the batched GPU EKF.
 

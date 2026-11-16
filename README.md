@@ -12,7 +12,7 @@ We tune the process noise **Q** and the measurement noise **R** together, offlin
 
 **Methodology.** Q/R optimization is performed offline using the complete recorded flight. The primary optimization objective is whole-flight horizontal position RMSE. Robustness is evaluated separately by applying predefined sensor perturbations and measuring whole-flight RMSE degradation.
 
-The experiment evaluates the ability of the optimization algorithms to identify Q/R parameters for the given ETH Zurich flight under a fixed computational budget. It does not test generalization to unseen flights.
+The experiment evaluates the ability of the optimization algorithms to identify Q/R parameters for each of three recorded runs, separately: the ETH Zurich flight and the iNav-WHU `playground00` and `street00` drives, under a fixed budget of 2,000 evaluations per seed and 5 seeds per optimizer. It does not test generalization to unseen runs.
 
 **Other datasets.** The EKF reads one processed dataset at a time, chosen with `--dataset` (ETH Zurich by default). A data pipeline turns the raw files of several other sources into the same format, and marks which ones can drive a GPS-aided EKF tuned against ground truth. Of the 93 datasets processed so far, ETH and the two iNav-WHU sequences can; see [Other datasets and the data pipeline](#other-datasets-and-the-data-pipeline) and [Results on other datasets](#results-on-other-datasets).
 
@@ -20,37 +20,54 @@ The experiment evaluates the ability of the optimization algorithms to identify 
 
 | Branch | Holds |
 |---|---|
-| `main` | Data, the EKF, the canonical fitness function and this README. Everyone uses it unchanged |
-| `ga`, `pso`, `de`, `gwo` | One optimizer each: its code and its config file, built on `main` |
-| `results` | Runs of every optimizer against the baseline, and the evaluation figures |
-| `data` | The usable datasets: `raw_data/` and `processed_data/` for ETH and iNav-WHU (the others are ignored; see [Other datasets](#other-datasets-and-the-data-pipeline)) |
+| `main` | Everything needed to run the benchmark: the data (`data/`, `raw_data/`, `processed_data/`), the data pipeline, the EKF and fitness (`ekf/`), the four optimizers and their configs, `run_all.py`, the plotting scripts, this README and the results |
+| `ga`, `pso`, `de`, `gwo`, `hisa` | One optimizer each: its code and its config file only |
+| `data` | The datasets (`data/`, `raw_data/`, `processed_data/` for ETH and iNav-WHU) and the data pipeline only |
+| `results` | The graphs and per-run files from `run_all.py` only |
 
-Changes to the data, the filter or the fitness function go into `main` first and are then merged into every branch, so all four optimizers always score candidates in the same way.
+Shared code (filter, fitness, pipeline) changes on `main`. An optimizer is edited on `main` and copied to its branch, so the two stay identical.
 
-## PSO settings (from the `pso` branch)
+## Running everything
 
-`PSO.py` runs global-best Particle Swarm Optimization on the 7-D log10 decision vector within `[LOWER, UPPER]`. Its settings are in `PSO_config.py`.
-
-| Setting | Value |
-|---|---|
-| Swarm size × iterations | 200 × 50 = 10,000 evaluations per seed |
-| Seeds | 1, 2, 3, 4, 5 (50,000 evaluations in total) |
-| Objective backend | GPU: each iteration's 200 particles are one batched EKF pass (`ekf/gpu.py`) |
-| Inertia w | linear from 0.9 to 0.4 |
-| c1, c2 | 1.49445, 1.49445 |
-| Velocity clamp | 20 % of each parameter's bound range |
-| Bounds handling | absorbing walls: position clipped, outward velocity set to 0 |
-| Initial swarm | uniform within the bounds (THETA0 is not seeded in) |
-
-Every candidate is scored through `ekf.make_cost_fn`, so the budget, the convergence curve and the timing match the other optimizers.
-
-While it runs, every evaluation is appended to `results/PSO_gpu/pso_log.csv` as soon as its iteration is scored. Each row holds `seed, iteration, particle, k, generation, fitness, best_so_far, elapsed` and the 7 θ values, so you can open the file mid-run to watch progress. Rerunning a seed replaces that seed's rows. A progress line is also printed after each iteration. `results/PSO/` holds the earlier 20 × 50 CPU runs (seeds 0–4) and is not overwritten.
+One command runs GA, PSO, DE and GWO on all three datasets, one optimizer at a time on the GPU, then builds every table, graph and response surface:
 
 ```bash
-python PSO.py                                        # all seeds -> results/PSO_gpu/
-python PSO.py --seeds 1 --max-evals 40 --swarm 8     # quick check
-python PSO.py --backend cpu --workers 10             # filterpy reference on the CPU
+python run_all.py
 ```
+
+| Option | Does |
+|---|---|
+| `--plan` | Prints what would run and a time estimate; runs nothing |
+| `--smoke` | Tiny budget (population 4, 8 evaluations, seed 1) into `results_smoke/`, to check the pipeline end to end |
+| `--plots-only` | Rebuilds the tables and figures from `results/` |
+| `--datasets`, `--optimizers` | A subset, e.g. `--datasets eth --optimizers PSO GWO` |
+
+It runs from `main` with a CUDA build of PyTorch and refuses to start on another branch. It is resumable: a seed whose `runs.csv` row, convergence curve and incumbents file are complete is skipped, so it can be stopped (Ctrl+C) and started again. A lock file (`results/.run_all.lock`) stops two runs from sharing the GPU. Everything printed goes to `results/run_all.log`, and every session is recorded in `results/run_all_manifest.json` (settings, versions, GPU, git commit, timings, checks).
+
+For each dataset it:
+
+1. checks the GPU objective: the first 24 candidates GA scores for seed 1 are scored again by the filterpy reference on the CPU; the run stops if any difference exceeds `TOL_RMSE = 1e-6` m;
+2. scores the baseline `THETA0`;
+3. runs GA, PSO, DE and GWO, five seeds each, then checks that every seed used exactly 2,000 evaluations (`n_evals`, `n_objective_evals` and the convergence-curve rows), and scores the robustness of every incumbent of every seed on the GPU (`ekf/response.py`), which the response surfaces need;
+4. writes the dataset's table, convergence and robustness figures.
+
+Then it writes `results/summary/`: one table over all datasets, the best values, and one 4D response surface per optimizer.
+
+**Time.** `python run_all.py --plan` estimates about 0.9 h for ETH and about 6 to 7 h for each iNav-WHU drive (about 14 h in total) on an RTX 4060 Laptop GPU. An iNav-WHU candidate costs about 7 times an ETH one: 265,000 to 280,000 IMU predictions at 200 Hz against 27,000 at 10 Hz. The estimate is scaled from measured ETH speed, not measured on iNav-WHU.
+
+## Optimizers
+
+All four use the same budget, the same decision vector and bounds, the same fitness and the GPU backend. Settings are in each `<NAME>_config.py`.
+
+| | GA | PSO | DE | GWO |
+|---|---|---|---|---|
+| Population × generations | 200 × 10 | 200 × 10 | 200 × (1 + 9) | 200 × 10 |
+| Evaluations per seed | 2,000 | 2,000 | 2,000 | 2,000 |
+| Seeds | 1–5 | 1–5 | 1–5 | 1–5 |
+| Operators | tournament 3, 2 elites, BLX-0.5 crossover (0.9), Gaussian mutation (0.2, σ = 10 % of range) | global best, inertia 0.9 → 0.4, c1 = c2 = 1.49445, velocity clamp 20 %, absorbing walls | DE/rand/1/bin, F = 0.7, CR = 0.9, greedy selection | α/β/δ leaders, a from 2 to 0 |
+| Starting population | uniform in bounds, `THETA0` as one individual | uniform in bounds | uniform in bounds, `THETA0` as one individual | uniform in bounds, `THETA0` as one wolf |
+
+HISA, on the `hisa` branch, searches a different decision vector (initial biases and R) at its own budget, so it is not part of `run_all.py`.
 
 ## Layout
 
@@ -64,6 +81,10 @@ python PSO.py --backend cpu --workers 10             # filterpy reference on the
 | `ekf/filter.py` | The EKF, built on `filterpy.kalman.ExtendedKalmanFilter` |
 | `ekf/tuning.py` | Decision vector, bounds, `theta_to_QR`, the canonical `fitness`, `FitnessTracker`, `robustness` and the result helpers |
 | `ekf/gpu.py` | The same EKF batched over candidates on the GPU (PyTorch, float64), used by `FitnessTracker(backend="gpu")`, and `compare_with_cpu` |
+| `ekf/response.py` | Robustness of every incumbent of a run (on the GPU), and the accuracy-robustness-compute path of a seed, for the response surfaces |
+| `GA.py`, `PSO.py`, `DE.py`, `GWO.py` | The optimizers; settings in `<NAME>_config.py` |
+| `run_all.py` | Runs every optimizer on every dataset and builds all outputs |
+| `plot_response.py` | Tables, convergence and robustness figures, and the 4D response surfaces, from the results |
 | `run_baseline.py` | Evaluates `THETA0` through the same fitness and writes `results/baseline/` (`results/<dataset>/baseline/` for other datasets) |
 | `plot_trajectories.py` | Map of ground truth, GNSS and EKF trajectories in local ENU, with the error over time |
 
@@ -71,7 +92,12 @@ python PSO.py --backend cpu --workers 10             # filterpy reference on the
 
 ```bash
 pip install -r requirements.txt
+python run_all.py --plan                        # what the full benchmark will do, and how long
+python run_all.py                               # the full benchmark
+
+# single pieces
 python run_baseline.py                          # ETH Zurich flight
+python GA.py --dataset inavwhu/playground00     # one optimizer on one dataset
 
 # any other dataset: process it, then run on it
 python -m data_pipeline --list                  # datasets and their EKF status
@@ -104,86 +130,13 @@ With `n_workers > 1` the script must run its optimizer under `if __name__ == "__
 To score each population as one batch on the GPU instead, pass `backend="gpu"` (needs a CUDA build of PyTorch, see `requirements.txt`):
 
 ```python
-cost_fn = ekf.make_cost_fn(data, max_evals=10000, backend="gpu")
+cost_fn = ekf.make_cost_fn(data, max_evals=2000, backend="gpu")
 costs = cost_fn.evaluate_many(population)         # 200 candidates -> one batched EKF pass
 ```
 
-## Results summary
+## Results
 
-Two runs on one RTX 4060 Laptop GPU, both on the complete ETH Zurich flight. All numbers below are final values re-scored by the filterpy reference filter. The full files are on the [`results` branch](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/tree/results/results).
-
-- **GPU benchmark** (`results/benchmark_20261114_233504/`): GA, PSO, DE and GWO, population 200, 10,000 evaluations per seed, seeds 1–5, 7-D log-variance decision vector.
-- **HISA** (`results/HISA/`): one deterministic coarse-to-fine run over 2,239,488 joint initial-bias + R candidates (82,944 bias × 27 R), Int50 → Int1 (best 5,210), with Q at `THETA0`.
-
-### Headline numbers
-
-Mean ± std over 5 seeds (HISA: one run). Raw GPS is 3.604 m.
-
-| Method | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | Robustness mean ΔRMSE_h (m) | Evals to 99 % of improvement | EKF steps | Wall clock |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Baseline (`THETA0`) | 3.775 | – | +0.171 | 0.97 | +0.022 | – | 4.1 × 10⁴ | 5 s |
-| GA | 3.546 ± 0.016 | −0.229 | −0.058 | 1.98 ± 1.59 | +0.284 ± 0.080 | 8,421 ± 1,136 | 4.1 × 10⁸ per seed | 11.8 min per seed |
-| **PSO** | **3.499 ± 0.001** | **−0.276** | **−0.105** | 3.68 ± 0.32 | +0.373 ± 0.010 | 6,690 ± 1,660 | 4.1 × 10⁸ per seed | 11.8 min per seed |
-| DE | 3.538 ± 0.012 | −0.237 | −0.066 | 2.75 ± 0.84 | +0.282 ± 0.014 | 7,672 ± 1,458 | 4.1 × 10⁸ per seed | 11.8 min per seed |
-| **GWO** | **3.501 ± 0.001** | **−0.274** | **−0.103** | 3.79 ± 0.13 | +0.381 ± 0.027 | **5,726 ± 1,564** | 4.1 × 10⁸ per seed | 11.8 min per seed |
-| HISA | 3.598 | −0.178 | −0.006 | 8.68 | +0.144 | – | 2.6 × 10⁹ | 50.7 min |
-
-### Best values found
-
-The best seed of each optimizer, and the HISA winner. Values are log10 of the noise densities and variances.
-
-| Method (seed) | RMSE_h (m) | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` | Mean NIS | Robustness mean / max ΔRMSE_h (m) |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| `THETA0` | 3.775 | 0.20 | −3.00 | −5.00 | −8.00 | 1.00 | 1.50 | 0.00 | 0.97 | +0.022 / +0.049 |
-| GA (seed 1) | 3.527 | 0.07 | −6.00 | −8.00 | −9.61 | −0.28 | 0.39 | 1.85 | 4.19 | +0.416 / +1.089 |
-| **PSO (seed 5)** | **3.499** | 0.18 | −6.00 | −7.59 | −10.00 | −0.41 | 2.74 | 2.00 | 3.85 | +0.377 / +0.746 |
-| DE (seed 4) | 3.520 | 0.35 | −5.88 | −5.02 | −10.35 | −0.50 | 3.50 | 1.80 | 2.98 | +0.303 / +0.621 |
-| GWO (seed 4) | 3.499 | 0.20 | −6.00 | −6.69 | −10.01 | −0.38 | 1.41 | 1.78 | 3.79 | +0.364 / +0.736 |
-| HISA | 3.598 | 0.20 | −3.00 | −5.00 | −8.00 | −1.00 | −0.50 | 0.00 | 8.68 | +0.144 / +0.330 |
-
-HISA winner (candidate 2,173,042): initial biases $b_a$ = (+100, −100, −100) m/s² and $b_g$ = (−10, +100, +1) rad/s; its Q noise terms are `THETA0` by design.
-
-### What the results show
-
-1. **PSO and GWO are the most accurate.** Both reach 3.499–3.501 m with almost no spread between seeds, 0.276 m better than the baseline EKF and 0.105 m better than raw GPS. GWO converges fastest (median 5,401 evaluations to 99 % of its improvement). GA and DE end 0.04–0.05 m higher and vary more between seeds.
-2. **Accuracy is bought with robustness.** All four optimizers lower `r_xy` below 1 m² and so track GPS position more tightly. Under 2 m of added GPS noise their RMSE rises by 0.62–0.73 m, against 0.05 m for the baseline.
-3. **The optimizers push several parameters to the search bounds.** `log_q_gyro` = −6 is its lower bound for GA, PSO and GWO (DE: −5.88), and `log_r_vel` approaches its upper bound of 2 (PSO reaches 2.00), so GPS velocity is almost ignored. Wider bounds could move the optimum further.
-4. **HISA just beats raw GPS by following it.** Its winner reaches 3.598 m (0.178 m better than the baseline EKF, 0.006 m better than raw GPS), about 0.10 m behind PSO and GWO. It sits on the edge of HISA's grid: `r_xy` and `r_z` at their lower bounds (0.1 m² and 0.32 m²), so the filter trusts GPS position strongly, and NIS 8.7 shows it is overconfident. Its initial biases are the largest on the grid (100 m/s², 100 rad/s), physically implausible; with R that tight, the IMU barely affects the estimate, and its error trace almost overlays raw GPS. Its robustness (+0.144 m) lies between the baseline and the four optimizers.
-5. **The Int50 screen does not preserve the Int1 order.** Among the 5,210 finalists, the Spearman rank correlation between Int50 and Int1 scores is −0.36. At Int50 the best score of every R combination lies within 3.46–3.56 m (one outlier at 5.21 m), so the 5-second integration blocks hide most of the difference that Int1 then shows.
-6. **Compute.** Each optimizer used exactly 10,000 evaluations per seed (4.1 × 10⁸ EKF steps, 11.8 min on the GPU, about 61 min for all five seeds). HISA used 2,244,698 literal evaluations, 49,999.76 Int1-equivalent, and 2.6 × 10⁹ EKF steps (an Int50 evaluation is about 1/37 of an Int1 one, not 1/50, because each block keeps a GPS update) in 50.7 min: about 45 min at Int50 and 4.5 min at Int1. That is 1.3 × the EKF steps of all five seeds of one optimizer.
-7. **Batched GPU evaluation matches the CPU reference:** within 7.4 × 10⁻⁸ m on the benchmark's 200-candidate check, and within 8.4 × 10⁻⁸ m on HISA's checks at both levels.
-
-### Graphs
-
-**Convergence: best-so-far whole-flight RMSE_h against evaluations (median and every seed)**
-
-![Convergence](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/benchmark_20261114_233504/convergence.png)
-
-**Robustness: clean → perturbed RMSE_h, and ΔRMSE_h per perturbation**
-
-![Robustness](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/benchmark_20261114_233504/robustness.png)
-
-**4D response: accuracy × robustness × convergence, coloured by compute** (interactive version: [response_4d.html](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/blob/results/results/benchmark_20261114_233504/response_4d.html), download it and open it in a browser)
-
-![4D response](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/benchmark_20261114_233504/response_4d.png)
-
-**HISA against the benchmark optimizers (marker size ∝ measured wall clock)**
-
-![HISA comparison](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/comparison.png)
-
-**HISA: best score for each R combination at Int50 and Int1 (one panel per `r_vel`)**
-
-![HISA R search](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/qr_search.png)
-
-**HISA: Int50 → Int1 scores of the finalists and screening fidelity**
-
-![HISA stage progression](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/stage_progression.png)
-
-**Whole-flight horizontal error: raw GPS, baseline EKF, HISA winner**
-
-![EKF error comparison](https://raw.githubusercontent.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/results/results/HISA/figures/ekf_error_comparison.png)
-
-More HISA figures (score against iteration, bias distributions, best-so-far) are in [`results/HISA/figures/`](https://github.com/Niterousnebula/Joint-Tuning-of-QR-Matricies-in-GPS-IMU-EKF/tree/results/results/HISA/figures).
+The results of `run_all.py` (2,000 evaluations × 5 seeds × GA, PSO, DE, GWO on ETH, `playground00` and `street00`) will be added here when the run is done. Earlier runs (10,000 evaluations on ETH only, and HISA) have been removed with all other generated data; see the git history before November 2026 for the code that produced them.
 
 ## Reference results
 
@@ -382,7 +335,7 @@ GPU backend:     [200 candidates] -> batched EKF -> [200 fitness values]
 
 Only the candidate dimension is batched. The time recursion is the reference loop unchanged: the same IMU predictions, the same GPS updates in the same order, quaternion normalisation after each, and the same divergence checks. Each candidate keeps its own state, covariance, $Q_c$ and $R$. All arithmetic is float64. The small quaternion matrices come from constant matrices built from the reference helpers in `filter.py`, so both backends use the same functions. Each IMU step (prediction plus 0, 1 or 2 GPS updates) is recorded once as a CUDA graph and replayed, which removes Python overhead from the 27 048-step loop.
 
-**Equivalence.** `ekf.gpu.compare_with_cpu(data, thetas)` scores the same candidates with both backends; the accepted tolerance is `TOL_RMSE = 1e-6` m and `TOL_NIS_REL = 1e-6`. On the RTX 4060, for GA seed 1's first generation (200 candidates, `results/validation_gpu_vs_cpu/` on the `results` branch), 195 candidates agreed to better than $10^{-12}$ m. The largest fitness difference was $7.4 \times 10^{-8}$ m, for a strongly overconfident candidate (mean NIS 110) whose ill-conditioned updates amplify rounding. The largest relative difference in mean NIS was $7.6 \times 10^{-9}$. A candidate that diverges fails on both backends and scores `PENALTY`.
+**Equivalence.** `ekf.gpu.compare_with_cpu(data, thetas)` scores the same candidates with both backends; the accepted tolerance is `TOL_RMSE = 1e-6` m and `TOL_NIS_REL = 1e-6`. On the RTX 4060, for GA seed 1's first generation on ETH (200 candidates, in an earlier run), 195 candidates agreed to better than $10^{-12}$ m. The largest fitness difference was $7.4 \times 10^{-8}$ m, for a strongly overconfident candidate (mean NIS 110) whose ill-conditioned updates amplify rounding. The largest relative difference in mean NIS was $7.6 \times 10^{-9}$. A candidate that diverges fails on both backends and scores `PENALTY`. `run_all.py` repeats this check on every dataset before any optimizer runs (`results/<dataset>/validation/`).
 
 **Reported values always come from the reference.** `run_summary` re-scores the final best theta with the filterpy filter on the CPU, and the robustness runs are CPU runs too. The GPU only drives the search. `best_fitness_search` is the value the search saw and `search_vs_final_diff` shows the (rounding-level) difference.
 
@@ -405,10 +358,10 @@ Original clean flight
 ### Rules for a fair comparison
 
 - Same parameterization (`THETA_NAMES`), same bounds (`LOWER`, `UPPER`), same fitness (`make_cost_fn`) and same budget (`max_evals`) for every optimizer.
-- Starting population: `np.random.default_rng(seed).uniform(lower, upper, (n_pop, n_dim))`; `THETA0` is not included.
+- Starting population: `np.random.default_rng(seed).uniform(lower, upper, (n_pop, n_dim))`. GA, DE and GWO put `THETA0` in as one member of the first population; PSO does not.
 - Budget: every fitness call counts, including the first population. Stop as soon as `n_evals` reaches `max_evals`.
 - Seeds are fixed and recorded, so every run can be reproduced.
-- Each run is written with `run_summary` and `save_run`, so every optimizer produces the same files: `results/<NAME>/runs.csv` (one row per seed) and `results/<NAME>/convergence_seed<seed>.csv`.
+- Each run is written with `run_summary` and `save_run`, so every optimizer produces the same files: `runs.csv` (one row per seed) and `convergence_seed<seed>.csv` in `results/<dataset>/<NAME>/`.
 - Each optimizer branch puts its settings (population size, budget, seeds and algorithm-specific values) in its own config file.
 
 ## Evaluation framework
@@ -486,29 +439,39 @@ Every run produces a row with these values, so the comparison can be laid out as
 | Optimizer | Whole-flight RMSE_h | vs baseline | vs GPS | Robustness ΔRMSE_h | Evals to converge | N_eval | T_total | T_eval |
 |---|---|---|---|---|---|---|---|---|
 | Baseline | 3.775 m | – | +0.171 m | +0.022 m | – | 1 | – | – |
-| GA, PSO, DE, GWO | from `results/<NAME>/runs.csv` | | | | | | | |
+| GA, PSO, DE, GWO | from `results/<dataset>/<NAME>/runs.csv` | | | | | | | |
 
-## Results (this branch)
+## Results layout
+
+`run_all.py` writes:
 
 | Path | Holds |
 |---|---|
-| `results/baseline/` | `THETA0` through the canonical fitness: `runs.csv`, `convergence_seed0.csv`, trajectory, innovations, GPS vs ground truth, error time series and error summary |
-| `results/<GA, PSO, DE, GWO>/` | Each optimizer's runs, merged in from its branch: `runs.csv` (one row per seed, written by `ekf.save_run`) and `convergence_seed<seed>.csv` |
-| `results/results_table.md`, `.csv` | Mean ± std per optimizer, in the order accuracy, robustness, convergence, compute, with comparisons against both the baseline EKF and raw GPS |
-| `results/convergence.png` | Best-so-far whole-flight RMSE $J^*(k)$ against evaluations $k$, every seed and the median per optimizer, with the baseline and raw GPS as reference lines |
-| `results/robustness.png` | Clean → perturbed whole-flight RMSE, and $\Delta\text{RMSE}_h$ per perturbation |
-| `results/response_4d.png`, `.html` | 4D response graph: accuracy (whole-flight RMSE_h), robustness (mean $\Delta\text{RMSE}_h$) and convergence (evals to 99 % of improvement) on the axes, computational cost as colour |
+| `results/<dataset>/validation/` | GPU vs filterpy check: `validation_table.csv`, `validation_summary.json` |
+| `results/<dataset>/baseline/` | `THETA0` through the same fitness: `runs.csv`, `convergence_seed0.csv` |
+| `results/<dataset>/<OPT>/` | `runs.csv` (one row per seed), `convergence_seed<s>.csv` (every evaluation: k, generation, fitness, best-so-far, time, θ), `incumbents_seed<s>.csv` (robustness of every best-so-far θ), and the PSO, DE and GWO live logs |
+| `results/<dataset>/` | `results_table.md`/`.csv`, `convergence.png`, `robustness.png` |
+| `results/summary/` | `results_table.md`/`.csv` (all datasets), `best_values.md`/`.csv` (best seed per optimizer and dataset, with θ), `response_surface_<OPT>.png`/`.html` |
+| `results/run_all.log`, `results/run_all_manifest.json` | Console output and per-session record |
 
-The colour of the 4D graph is $N_{eval}$ when it differs between optimizers. Under the fixed budget it is the same for all of them, so the graph shows $T_{total}$ instead and states $N_{eval}$ in the colour-bar label.
+`<dataset>` is `eth`, `inavwhu/playground00` or `inavwhu/street00`.
 
-To refresh after adding optimizer results:
+**4D response surface (one per optimizer).** It uses every evaluation of every seed. At each evaluation $k$ a seed has its best-so-far accuracy $A(k)$ (whole-flight RMSE_h), the robustness $R(k)$ of that best-so-far θ (mean ΔRMSE_h over the perturbations) and its wall-clock time $T(k)$. Robustness needs five extra full-flight runs per θ, so it is computed for each incumbent (each θ that became the best so far), which gives $R(k)$ at every $k$. Each seed is then a path $(A, R, k)$; the five paths, ordered by final accuracy and interpolated between neighbours, span the surface, which is coloured by $T$. Robustness is smoothed over neighbouring $k$ on the surface, and the raw seed paths are drawn on it. One figure per optimizer has one panel per dataset (`results/summary/response_surface_<OPT>.png`, and an interactive `.html`).
+
+**Committing the results.** Per the branch split, `main` keeps the results and `results` keeps the graphs:
 
 ```bash
-python run_baseline.py
-python plot_response.py
+git add results README.md && git commit -m "Add run_all results"          # on main
 ```
 
-`plot_response.py` needs `matplotlib`, and `plotly` for the interactive graph.
+```bash
+git switch results
+git checkout main -- results
+git commit -m "Add run_all results"
+git switch main
+```
+
+The largest files are the convergence curves (2,000 rows per seed) and the PSO, DE and GWO live logs (10,000 rows per optimizer and dataset), all well under GitHub's 50 MB recommendation.
 
 ## Data
 
@@ -578,10 +541,6 @@ The EKF was run on the three clean datasets, the ones marked `ekf_ready`: ETH, i
 
 On `playground00` the vehicle starts facing about 179° from north, and the old initial yaw guess (east) was 91° off; the heading initialisation brings that to 5°, and the baseline goes from 0.017 m worse than raw GNSS to 0.004 m better. On `street00` the vehicle already starts facing east, so nothing changes. With realistic sensor noise the effect is much larger: on `playground00` the RMSE falls from 3.314 m to 1.792 m (a start at the true attitude gives 1.781 m).
 
-### PSO
-
-PSO results for the iNav-WHU datasets are being added; see the commit history.
-
 ### Why the EKF cannot do much better than GNSS
 
 Measured on these datasets, in order of importance:
@@ -615,4 +574,4 @@ A chi-square gate on each fix is implemented (`OPTIONS["gate"]`, with a timeout 
 5. **Ground-truth timing** is a fit, good to about ±0.3 s over most of the flight; the last 102 rows (`stretch` 3) are less certain.
 6. **10 Hz IMU.** The IMU log is sparse and heavily aliased, so the accelerometer noise density is large and the prediction is weak between fixes.
 7. **Wall-clock time** depends on the machine, the `backend` and `n_workers`; compare optimizers on $N_{eval}$ and on convergence curves first.
-8. **Other datasets.** `THETA0` and the bounds come from the ETH sensor and are the same for every dataset. The iNav-WHU sequences are 10 times longer than ETH in IMU steps, so a candidate costs about 2 s on an RTX 3050 laptop GPU against about 0.1 s on ETH; a 10,000-evaluation seed would take about 5.5 hours.
+8. **Other datasets.** `THETA0` and the bounds come from the ETH sensor and are the same for every dataset. The iNav-WHU sequences are about 10 times longer than ETH in IMU steps, so a candidate costs about 7 times as much on the GPU; that is why the budget is 2,000 evaluations per seed (about 15 minutes per seed on iNav-WHU on an RTX 4060, estimated).

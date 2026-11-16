@@ -121,10 +121,21 @@ class BudgetExhausted(Exception):
 
 _worker_data = None
 
+# Processes used to re-score a final theta (robustness runs) on the CPU; run_all.py raises it.
+RESCORE_WORKERS = 1
 
-def _init_worker(data):
+
+def _init_worker(data, options=None):
+    """Pool initializer: the dataset, and the parent's filter OPTIONS (spawned workers start fresh)."""
     global _worker_data
     _worker_data = data
+    if options:
+        OPTIONS.update(options)
+
+
+def _worker_perturbed_rmse(args):
+    kwargs, theta, bias0 = args
+    return evaluate(perturb(_worker_data, **kwargs), theta, bias0=bias0)["rmse_h"]
 
 
 def _worker_fitness(theta):
@@ -139,7 +150,7 @@ def cpu_metrics_many(data, thetas, n_workers=1):
     """Reference (filterpy) metrics for many candidates: dict of arrays, METRIC_KEYS."""
     thetas = list(np.atleast_2d(np.asarray(thetas, dtype=float)))
     if n_workers > 1:
-        with Pool(n_workers, initializer=_init_worker, initargs=(data,)) as pool:
+        with Pool(n_workers, initializer=_init_worker, initargs=(data, dict(OPTIONS))) as pool:
             rows = pool.map(_worker_metrics, thetas)
     else:
         rows = [_metrics(data, t) for t in thetas]
@@ -224,7 +235,7 @@ class FitnessTracker:
             costs = list(self._gpu.fitness(np.asarray(thetas)))
         elif self.n_workers > 1 and len(thetas) > 1:
             if self._pool is None:
-                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data,))
+                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data, dict(OPTIONS)))
             costs = self._pool.map(_worker_fitness, thetas)
         else:
             costs = [fitness(self.data, t) for t in thetas]
@@ -306,7 +317,7 @@ def evals_to_converge(best_so_far, fraction=CONVERGENCE_FRACTION):
 # ---------------------------------------------------------------------------
 # Robustness: whole-flight RMSE degradation under predefined perturbations
 # ---------------------------------------------------------------------------
-def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=None):
+def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=None, n_workers=None):
     """Degradation of a fixed theta under each perturbation of the flight.
 
     theta (and bias0, the optional initial bias states) is never re-tuned here.
@@ -315,12 +326,20 @@ def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=
         delta_pct = 100 * delta / RMSE_h,clean
     Returns {"rmse_clean", "per_perturbation": {name: {rmse, delta, delta_pct}},
              "delta_mean", "delta_max"}.
+    The perturbed runs are independent; with n_workers > 1 (default RESCORE_WORKERS) they run
+    in parallel CPU processes, with identical results.
     """
     if rmse_clean is None:
         rmse_clean = evaluate(data, theta, bias0=bias0)["rmse_h"]
+    n_workers = RESCORE_WORKERS if n_workers is None else n_workers
+    tasks = [(kwargs, theta, bias0) for kwargs in perturbations.values()]
+    if n_workers > 1:
+        with Pool(min(n_workers, len(tasks)), initializer=_init_worker, initargs=(data, dict(OPTIONS))) as pool:
+            values = pool.map(_worker_perturbed_rmse, tasks)
+    else:
+        values = [evaluate(perturb(data, **kw), t, bias0=b)["rmse_h"] for kw, t, b in tasks]
     per = {}
-    for name, kwargs in perturbations.items():
-        value = evaluate(perturb(data, **kwargs), theta, bias0=bias0)["rmse_h"]
+    for name, value in zip(perturbations, values):
         delta = value - rmse_clean
         per[name] = {"rmse": value, "delta": delta, "delta_pct": 100.0 * delta / rmse_clean}
     deltas = np.array([p["delta"] for p in per.values()])
