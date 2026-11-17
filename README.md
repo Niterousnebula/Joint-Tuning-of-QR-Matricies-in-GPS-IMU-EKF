@@ -53,7 +53,7 @@ For each dataset it:
 
 Then it writes `results/summary/`: one table over all datasets, the best values, and one 4D response surface per optimizer.
 
-**Time.** `python run_all.py --plan` estimates about 0.9 h for ETH and about 6 to 7 h for each iNav-WHU drive (about 14 h in total) on an RTX 4060 Laptop GPU. An iNav-WHU candidate costs about 7 times an ETH one: 265,000 to 280,000 IMU predictions at 200 Hz against 27,000 at 10 Hz. The estimate is scaled from measured ETH speed, not measured on iNav-WHU.
+**Time.** On an RTX 4060 Laptop GPU the full run took 14.0 h: 0.98 h for ETH, 6.29 h for `playground00` and 6.72 h for `street00` (`--plan` estimated 13.7 h). An iNav-WHU candidate costs about 7 times an ETH one: 265,000 to 280,000 IMU predictions at 200 Hz against 27,000 at 10 Hz. 
 
 ## Optimizers
 
@@ -136,7 +136,87 @@ costs = cost_fn.evaluate_many(population)         # 200 candidates -> one batche
 
 ## Results
 
-The results of `run_all.py` (2,000 evaluations × 5 seeds × GA, PSO, DE, GWO on ETH, `playground00` and `street00`) will be added here when the run is done. Earlier runs (10,000 evaluations on ETH only, and HISA) have been removed with all other generated data; see the git history before November 2026 for the code that produced them.
+`python run_all.py` on an RTX 4060 Laptop GPU, 17 November 2026: GA, PSO, DE and GWO, population 200, 2,000 evaluations × seeds 1–5, on ETH, `playground00` and `street00`. Total 14.0 h (ETH 0.98 h, `playground00` 6.29 h, `street00` 6.72 h). The GPU-vs-filterpy check passed on every dataset (largest difference 2.8 × 10⁻⁹ m on ETH, 0 on iNav-WHU). Every seed used exactly 2,000 evaluations. All numbers below are re-scored by the filterpy reference; search and reference agree to within 3 × 10⁻¹⁴ m. Full tables: [`results/summary/results_table.md`](results/summary/results_table.md) and [`results/summary/best_values.md`](results/summary/best_values.md).
+
+### Headline numbers
+
+Mean ± std over 5 seeds. Raw GNSS: ETH 3.604 m, `playground00` 1.117 m, `street00` 1.034 m.
+
+| Dataset | Method | RMSE_h (m) | vs baseline (m) | vs raw GNSS (m) | Mean NIS (expected) | Robustness mean ΔRMSE_h (m) | Evals to 99 % | Time per seed |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| ETH | Baseline (`THETA0`) | 3.775 | – | +0.171 | 0.97 (6) | +0.022 | – | – |
+| ETH | GA | 3.593 ± 0.008 | −0.182 | −0.011 | 0.92 (6) | +0.201 ± 0.027 | 1,167 ± 236 | 2.4 min |
+| ETH | **PSO** | **3.536 ± 0.016** | **−0.239** | **−0.068** | 1.65 (6) | +0.248 ± 0.021 | 1,714 ± 329 | 2.4 min |
+| ETH | DE | 3.588 ± 0.016 | −0.188 | −0.016 | 1.19 (6) | +0.255 ± 0.085 | 809 ± 446 | 2.4 min |
+| ETH | GWO | 3.550 ± 0.026 | −0.225 | −0.054 | 1.38 (6) | +0.236 ± 0.030 | 1,665 ± 253 | 2.4 min |
+| `playground00` | Baseline (`THETA0`) | 1.113 | – | −0.004 | 0.00 (3) | +0.507 | – | – |
+| `playground00` | GA | 1.089 ± 0.000 | −0.023 | −0.028 | 0.00 (3) | +0.524 ± 0.015 | 1,266 ± 442 | 16.0 min |
+| `playground00` | PSO | 1.089 ± 0.000 | −0.023 | −0.028 | 0.00 (3) | +0.520 ± 0.017 | 1,365 ± 432 | 16.0 min |
+| `playground00` | DE | 1.090 ± 0.001 | −0.022 | −0.026 | 0.00 (3) | +0.519 ± 0.022 | 912 ± 650 | 16.0 min |
+| `playground00` | GWO | 1.089 ± 0.000 | −0.023 | −0.027 | 0.00 (3) | +0.529 ± 0.008 | 1,464 ± 271 | 16.0 min |
+| `street00` | Baseline (`THETA0`) | 1.042 | – | +0.008 | 0.00 (3) | +0.512 | – | – |
+| `street00` | GA | 1.035 ± 0.000 | −0.007 | +0.002 | 0.01 (3) | +0.919 ± 0.041 | 963 ± 214 | 16.9 min |
+| `street00` | PSO | 1.035 ± 0.000 | −0.007 | +0.002 | 0.01 (3) | +0.919 ± 0.013 | 673 ± 524 | 16.9 min |
+| `street00` | DE | 1.035 ± 0.000 | −0.007 | +0.002 | 0.01 (3) | +0.899 ± 0.052 | 672 ± 379 | 17.1 min |
+| `street00` | GWO | 1.035 ± 0.000 | −0.007 | +0.002 | 0.01 (3) | +0.918 ± 0.006 | 419 ± 197 | 17.0 min |
+
+### Best values found
+
+The best seed of each optimizer on each dataset (log10 of the noise densities and variances; bounds are `THETA0` ± 3 for Q and ± 2 for R).
+
+| Dataset | Optimizer (seed) | RMSE_h (m) | vs GNSS (m) | NIS | Robustness mean / max (m) | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| ETH | `THETA0` | 3.775 | +0.171 | 0.97 | +0.022 / +0.049 | 0.20 | −3.00 | −5.00 | −8.00 | 1.00 | 1.50 | 0.00 |
+| ETH | GA (1) | 3.583 | −0.021 | 1.24 | +0.243 / +0.707 | 0.86 | −5.37 | −8.00 | −10.96 | −1.00 | 0.28 | 1.56 |
+| ETH | PSO (5) | 3.517 | −0.087 | 2.81 | +0.270 / +0.629 | 0.31 | −5.84 | −6.04 | −9.75 | −0.61 | 2.12 | 1.86 |
+| ETH | DE (1) | 3.566 | −0.038 | 2.53 | +0.390 / +0.884 | 0.33 | −5.80 | −7.35 | −9.54 | 0.27 | 3.50 | 0.85 |
+| ETH | **GWO (5)** | **3.516** | **−0.088** | 2.51 | +0.276 / +0.594 | 0.43 | −5.77 | −5.50 | −9.98 | −0.47 | −0.11 | 1.91 |
+| `playground00` | GA (3) | 1.089 | −0.028 | 0.00 | +0.524 / +1.686 | 2.41 | −3.05 | −3.03 | −10.07 | 3.00 | 1.77 | 0.38 |
+| `playground00` | PSO (3) | 1.089 | −0.028 | 0.00 | +0.514 / +1.655 | 2.36 | −3.03 | −3.02 | −10.98 | 3.00 | 0.55 | −0.86 |
+| `playground00` | DE (2) | 1.089 | −0.027 | 0.00 | +0.551 / +1.793 | 2.56 | −2.92 | −7.43 | −10.56 | 3.00 | 0.08 | 0.07 |
+| `playground00` | GWO (4) | 1.089 | −0.028 | 0.00 | +0.527 / +1.695 | 2.42 | −3.04 | −3.13 | −10.09 | 3.00 | 0.88 | 0.00 |
+| `street00` | GA (5) | 1.035 | +0.002 | 0.01 | +0.926 / +3.205 | −0.07 | −5.48 | −2.00 | −5.00 | −1.00 | −0.10 | 0.24 |
+| `street00` | PSO (5) | 1.035 | +0.002 | 0.01 | +0.911 / +3.150 | −0.11 | −6.00 | −2.00 | −5.00 | −1.00 | −0.50 | −0.72 |
+| `street00` | DE (3) | 1.035 | +0.001 | 0.02 | +0.919 / +3.278 | −2.80 | −1.69 | −3.15 | −5.00 | 0.26 | −0.50 | 1.37 |
+| `street00` | GWO (2) | 1.035 | +0.002 | 0.01 | +0.912 / +3.143 | −0.11 | −6.00 | −2.00 | −5.00 | −1.00 | −0.50 | −0.18 |
+
+### What the results show
+
+1. **On ETH the optimizers differ, and PSO and GWO lead.** PSO averages 3.536 m and GWO 3.550 m, 0.24 and 0.23 m better than the baseline EKF and 0.07 and 0.05 m better than raw GNSS. The single best runs are GWO seed 5 (3.516 m) and PSO seed 5 (3.517 m). GA and DE end near 3.59 m, only just below raw GNSS. The convergence curves are still falling at 2,000 evaluations, so the budget, not the optimizers, limits ETH.
+2. **On iNav-WHU the optimizer does not matter.** All four reach the same value on each drive (std ≤ 0.001 m): 1.089 m on `playground00` (0.028 m better than raw GNSS) and 1.035 m on `street00` (0.002 m worse than raw GNSS). This matches [why the EKF cannot do much better than GNSS](#why-the-ekf-cannot-do-much-better-than-gnss): almost all of the GNSS error there is slow bias that a GNSS–IMU filter cannot observe, so there is almost nothing for Q and R to win.
+3. **Accuracy costs robustness.** Every tuned filter degrades more under the perturbations than the baseline: on ETH +0.20 to +0.26 m against +0.022 m, and on `street00` +0.90 to +0.92 m against +0.51 m. On `playground00` robustness stays at the baseline's level (+0.52 m).
+4. **The optimum often lies on a search bound.** On ETH, PSO's `log_q_gyro` sits at its lower bound −6, GA's `log_q_bg` at −10.96 (bound −11) and DE's `log_r_z` at its upper bound 3.5. On `playground00` all four put `log_r_xy` at its upper bound +3. On `street00` GA, PSO and GWO put `log_r_xy` at its lower bound −1, `log_q_ba` at its upper bound −2 and `log_q_bg` at its upper bound −5, and PSO, DE and GWO put `log_r_z` at its lower bound −0.5. The bounds come from the ETH sensor ([Known limits](#known-limits), item 8), so on iNav-WHU they cut the search off.
+5. **The iNav-WHU filters are not consistent.** Mean NIS is about 0 against an expected 3 at every tuned point, as at `THETA0`: the filter's own covariance does not describe its errors on that sensor.
+6. **Convergence.** On ETH, DE reaches 99 % of its improvement first (809 evaluations on average), but it improves less. On `street00` GWO is fastest (419). PSO and GWO keep improving latest on ETH (about 1,700), which is where their advantage comes from.
+7. **Compute.** A seed costs 2.4 min on ETH and 16–17 min on iNav-WHU: an iNav-WHU candidate is 6.7 to 7 times as expensive, as `--plan` predicted. The whole benchmark took 14.0 h, against the 13.7 h estimate. Scoring the robustness of every incumbent (for the response surfaces) added under 1 min per optimizer on ETH and 5 to 7 min on iNav-WHU.
+
+### Graphs
+
+**4D response surfaces: accuracy × robustness × convergence, coloured by compute** (one panel per dataset; interactive versions in `results/summary/response_surface_<OPT>.html`)
+
+![GA response surface](results/summary/response_surface_GA.png)
+
+![PSO response surface](results/summary/response_surface_PSO.png)
+
+![DE response surface](results/summary/response_surface_DE.png)
+
+![GWO response surface](results/summary/response_surface_GWO.png)
+
+**Convergence: best-so-far RMSE_h against evaluations (median and every seed)**
+
+![ETH convergence](results/eth/convergence.png)
+
+![playground00 convergence](results/inavwhu/playground00/convergence.png)
+
+![street00 convergence](results/inavwhu/street00/convergence.png)
+
+**Robustness: clean → perturbed RMSE_h and ΔRMSE_h per perturbation**
+
+![ETH robustness](results/eth/robustness.png)
+
+![playground00 robustness](results/inavwhu/playground00/robustness.png)
+
+![street00 robustness](results/inavwhu/street00/robustness.png)
 
 ## Reference results
 
