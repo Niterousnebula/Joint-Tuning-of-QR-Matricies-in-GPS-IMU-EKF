@@ -15,6 +15,7 @@ processed_data/*
 !processed_data/eth/
 !processed_data/inavwhu/
 
-# run_all.py
-results/.run_all.lock
+# main.py
+results/.main.lock
 results_smoke/
+!processed_data/eth_gps2m_s0/
