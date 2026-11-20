@@ -4,9 +4,9 @@ These settings apply only to PSO.py. The shared EKF, data loader and fitness fun
 remain in the existing `ekf` package and are not modified by this file.
 """
 
-# Experiment budget (same as GA, DE, GWO: 2,000 evaluations per seed, 5 seeds)
-SWARM_SIZE = 200            # 200 particles x 10 iterations = 2,000 evaluations
-MAX_EVALS = 2000
+# Experiment budget (same as GA, DE, GWO: 1,000 evaluations per seed, 5 seeds)
+SWARM_SIZE = 100            # 100 particles x 10 iterations = 1,000 evaluations
+MAX_EVALS = 1000
 SEEDS = (1, 2, 3, 4, 5)
 N_WORKERS = 1               # CPU backend only
 BACKEND = "gpu"             # "gpu": each iteration is one batched EKF pass; "cpu": filterpy reference
