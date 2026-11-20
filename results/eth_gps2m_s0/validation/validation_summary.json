@@ -1,0 +1,22 @@
+{
+  "n_candidates": 24,
+  "n_failed_cpu": 0,
+  "ok_flags_agree": true,
+  "max_diff_fitness": 4.726536495525124e-09,
+  "max_diff_rmse_h": 4.726536495525124e-09,
+  "max_diff_rmse_v": 1.8136425694592617e-10,
+  "max_diff_rmse_3d": 2.8990152500796285e-09,
+  "max_reldiff_mean_nis": 1.4341489675747602e-10,
+  "tol_rmse": 1e-06,
+  "tol_nis_rel": 1e-06,
+  "t_cpu": 37.81852820003405,
+  "t_gpu": 6.690067299990915,
+  "cpu_workers": 12,
+  "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+  "torch": "2.14.1+cu126",
+  "passed": true,
+  "max_diff_tracker_vs_cpu": 4.726536495525124e-09,
+  "optimizer": "GA",
+  "seed": 1,
+  "generation": 1
+}
