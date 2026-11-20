@@ -129,7 +129,7 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=Non
             ekf.save_run(out_dir, row, cost_fn)
         print(f"seed {seed}: RMSE_h {row['rmse_h']:.3f} m "
               f"(vs baseline {row['delta_vs_baseline']:+.3f} m, vs GPS {row['delta_vs_gps']:+.3f} m), "
-              f"robustness mean {row['delta_rmse_mean']:+.3f} m, "
+              f"mean NIS {row['mean_nis']:.2f}, "
               f"converged at k = {row['evals_to_converge']}, N_eval {row['n_evals']}, "
               f"T_total {row['t_total']:.0f} s (objective {row['t_objective']:.0f} s)", flush=True)
 

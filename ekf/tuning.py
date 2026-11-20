@@ -19,10 +19,25 @@ from .filter import N_MEAS, OPTIONS, init_state, nis_dof, run_ekf
 THETA_NAMES = ["log_q_acc", "log_q_gyro", "log_q_ba", "log_q_bg",
                "log_r_xy", "log_r_z", "log_r_vel"]
 THETA0 = np.array([0.2, -3.0, -5.0, -8.0, 1.0, 1.5, 0.0])
-LOWER = THETA0 - np.array([3.0, 3.0, 3.0, 3.0, 2.0, 2.0, 2.0])
-UPPER = THETA0 + np.array([3.0, 3.0, 3.0, 3.0, 2.0, 2.0, 2.0])
-LOWER_TIGHT = THETA0 - np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
-UPPER_TIGHT = THETA0 + np.array([1.5, 1.5, 1.5, 1.5, 1.0, 1.0, 1.0])
+THETA0_ETH = THETA0.copy()      # hand-set from the ETH sensor; ekf.load_data re-centres THETA0 per dataset
+HALF_WIDTH = np.array([3.0, 3.0, 3.0, 3.0, 2.0, 2.0, 2.0])
+LOWER = THETA0 - HALF_WIDTH
+UPPER = THETA0 + HALF_WIDTH
+LOWER_TIGHT = THETA0 - HALF_WIDTH / 2
+UPPER_TIGHT = THETA0 + HALF_WIDTH / 2
+
+
+def set_search_space(theta0):
+    """Centre THETA0 and the bounds on one dataset (called by ekf.load_data).
+
+    In place, so every reference to ekf.THETA0, LOWER and UPPER (including function defaults
+    and FitnessTracker) follows the dataset loaded last.
+    """
+    THETA0[:] = theta0
+    LOWER[:] = THETA0 - HALF_WIDTH
+    UPPER[:] = THETA0 + HALF_WIDTH
+    LOWER_TIGHT[:] = THETA0 - HALF_WIDTH / 2
+    UPPER_TIGHT[:] = THETA0 + HALF_WIDTH / 2
 
 PENALTY = 1000.0        # m; fitness of a run that fails
 NIS_DOF = N_MEAS        # full GPS position + velocity: a consistent filter averages NIS = 6.
@@ -121,7 +136,7 @@ class BudgetExhausted(Exception):
 
 _worker_data = None
 
-# Processes used to re-score a final theta (robustness runs) on the CPU; run_all.py raises it.
+# Processes for the perturbed runs of ekf.robustness (not part of main.py's results).
 RESCORE_WORKERS = 1
 
 
@@ -352,20 +367,18 @@ def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=
 # ---------------------------------------------------------------------------
 def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=None,
                 population_size=None):
-    """Score the tracker's best theta on all four benchmark dimensions.
-
-    Accuracy (rmse_h), robustness (delta_rmse_*), convergence (evals_to_converge,
-    evals_to_best) and compute (n_evals, t_total, t_eval, t_objective). Also reports the
-    comparison with the baseline EKF and with raw GPS separately.
+    """Score the tracker's best theta: accuracy (rmse_h, mean_nis), convergence
+    (evals_to_converge, evals_to_best) and compute (n_evals, t_total, t_eval, t_objective).
+    Also reports the comparison with the baseline EKF and with raw GPS separately.
+    Robustness is not part of the row; call ekf.robustness for it.
 
     The final theta is always re-scored with the filterpy reference on the CPU, so
-    rmse_h and the robustness numbers come from the reference filter whichever backend
+    rmse_h comes from the reference filter whichever backend
     drove the search. best_fitness_search is the value the search saw;
     search_vs_final_diff is their difference (rounding only, for the GPU backend).
     """
     theta = tracker.best_theta
     result = evaluate(data, theta)
-    rob = robustness(data, theta, rmse_clean=result["rmse_h"])
     rmse_gps = gps_rmse(data) if rmse_gps is None else rmse_gps
     row = {"optimizer": optimizer, "seed": seed,
            **dict(zip(THETA_NAMES, theta)),
@@ -378,12 +391,7 @@ def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=Non
     if rmse_baseline is not None:
         row["delta_vs_baseline"] = result["rmse_h"] - rmse_baseline
         row["improvement_vs_baseline_pct"] = 100.0 * (rmse_baseline - result["rmse_h"]) / rmse_baseline
-    row["delta_rmse_mean"] = rob["delta_mean"]
-    row["delta_rmse_max"] = rob["delta_max"]
-    for name, p in rob["per_perturbation"].items():
-        row[f"rmse_{name}"] = p["rmse"]
-        row[f"delta_{name}"] = p["delta"]
-        row[f"delta_pct_{name}"] = p["delta_pct"]
+    row.update({f"theta0_{n}": v for n, v in zip(THETA_NAMES, THETA0)})   # the dataset's starting point
     best = tracker.convergence()["best_so_far"].to_numpy()
     row.update({"evals_to_converge": evals_to_converge(best), "evals_to_best": tracker.evals_to_best,
                 "n_evals": tracker.n_evals, "max_evals": tracker.max_evals,

@@ -65,21 +65,23 @@ def load_data(dataset=DEFAULT_DATASET, processed_dir=PROCESSED_DIR, allow_unread
     truth arrays are then empty and nothing that scores against them can be used.
     """
     folder = Path(processed_dir) / dataset
-    if not (folder / "imu.csv").is_file():
+    if not (folder / "meta.json").is_file():
         _prepare(dataset, processed_dir)
     meta = json.loads((folder / "meta.json").read_text())
+    # A derived dataset (make_noisy_gps.py) holds only its own gps.csv; IMU and truth come from its source.
+    source = Path(processed_dir) / meta["derived_from"] if "derived_from" in meta else folder
     ready = meta.get("ekf_ready", {})
     if not ready.get("ready") and not allow_unready:
         raise DatasetNotReady(f"dataset {dataset!r} is not ready for the EKF: " + "; ".join(ready.get("reasons", [])))
     for name in ("gps", "gt") if require_gt else ("gps",):
-        if not (folder / f"{name}.csv").is_file():
+        if not ((folder if name == "gps" else source) / f"{name}.csv").is_file():
             raise DatasetNotReady(f"dataset {dataset!r} has no {name}.csv, so the EKF cannot run on it")
 
-    imu = pd.read_csv(folder / "imu.csv")
+    imu = pd.read_csv(source / "imu.csv")
     gps = pd.read_csv(folder / "gps.csv")
-    gt_path = folder / "gt.csv"
+    gt_path = source / "gt.csv"
     gt = pd.read_csv(gt_path) if gt_path.is_file() else pd.DataFrame(columns=["t", "e", "n", "u"], dtype=float)
-    return {
+    data = {
         "t_imu": imu["t"].to_numpy(),
         "accel": imu[["ax", "ay", "az"]].to_numpy(),
         "gyro": imu[["wx", "wy", "wz"]].to_numpy(),
@@ -91,6 +93,41 @@ def load_data(dataset=DEFAULT_DATASET, processed_dir=PROCESSED_DIR, allow_unread
         "motion": gt["motion"].to_numpy() if "motion" in gt.columns else np.full(len(gt), "unknown"),
         "dataset": dataset,
     }
+    from .tuning import set_search_space          # here, not at the top: tuning imports this module
+    data["theta0"] = dataset_theta0(data, gps, meta)
+    set_search_space(data["theta0"])
+    return data
+
+
+STATIC_WINDOW_S = 10.0     # every ekf_ready dataset starts at rest (the pipeline checks it)
+
+
+def dataset_theta0(data, gps, meta):
+    """THETA0 for one dataset, from its own sensors, so its search is centred on its own noise.
+
+    ETH keeps the hand-set THETA0 (built from the same statistics). Any other source: white-noise
+    densities from the IMU's first STATIC_WINDOW_S seconds (variance x sample interval) and position
+    variances from the receiver's reported sigmas (std_e/std_n/std_u) when the GPS file has them.
+    The bias random walks and r_vel keep the ETH values. Noise added by make_noisy_gps.py
+    (meta["gps_noise"]) is added to R, white and Gauss-Markov alike.
+    """
+    from .tuning import THETA0_ETH
+    theta = THETA0_ETH.copy()
+    if meta.get("derived_from", meta.get("id", data["dataset"])) != DEFAULT_DATASET:
+        t = data["t_imu"]
+        still = t < t[0] + STATIC_WINDOW_S
+        dt = float(np.median(np.diff(t)))
+        theta[0] = np.log10(data["accel"][still].var(axis=0).mean() * dt)
+        theta[1] = np.log10(data["gyro"][still].var(axis=0).mean() * dt)
+        if {"std_e", "std_n", "std_u"} <= set(gps.columns):
+            theta[4] = np.log10(((gps["std_e"] ** 2 + gps["std_n"] ** 2) / 2).mean())
+            theta[5] = np.log10((gps["std_u"] ** 2).mean())
+    noise = meta.get("gps_noise", {})
+    gm2 = noise.get("gm_sigma_m", 0.0) ** 2
+    theta[4] = np.log10(10 ** theta[4] + noise.get("sigma_h_m", 0.0) ** 2 + gm2)
+    theta[5] = np.log10(10 ** theta[5] + noise.get("sigma_u_m", 0.0) ** 2 + gm2)
+    theta[6] = np.log10(10 ** theta[6] + noise.get("sigma_vel_ms", 0.0) ** 2)
+    return theta
 
 
 def select_dataset(dataset=None, processed_dir=PROCESSED_DIR):
@@ -140,7 +177,7 @@ def results_dir(dataset, *parts):
 def prepare_run(data=None, dataset=None, out_dir=None, name="RUN"):
     """The dataset and output folder for one optimizer run (shared by GA, PSO, DE and GWO).
 
-    With `data` given (e.g. by run_all.py) it is used as is; otherwise `dataset` is loaded,
+    With `data` given (e.g. by main.py) it is used as is; otherwise `dataset` is loaded,
     asked for on a terminal if omitted. `out_dir` defaults to results_dir(dataset, name).
     Returns (data, dataset, out_dir).
     """
@@ -179,6 +216,34 @@ def perturb(data, gps_sigma=0.0, vel_sigma=0.0, accel_sigma=0.0, gyro_sigma=0.0,
         keep[0] = True                      # the first fix sets the initial state
         for key in ("t_gps", "p_gps", "v_gps"):
             out[key] = out[key][keep]
+    return out
+
+
+def degrade_gps(data, sigma_h, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0, seed=0):
+    """Copy of `data` with the GPS degraded to a lower-grade receiver; IMU and ground truth unchanged.
+
+    Each position axis gets white noise (sigma_h east/north, sigma_u up, default 1.5 * sigma_h) plus,
+    if gm_sigma > 0, a first-order Gauss-Markov error with steady-state std gm_sigma and correlation
+    time gm_tau, discretised exactly over the real interval between fixes:
+        b_k = exp(-dt/tau) b_{k-1} + gm_sigma sqrt(1 - exp(-2 dt/tau)) n_k.
+    Velocity channels (when present) get white noise sigma_vel. A missing channel (NaN) stays NaN.
+    The same seed always gives the same copy.
+    """
+    rng = np.random.default_rng(seed)
+    out = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in data.items()}
+    n = len(out["t_gps"])
+    sigma = np.array([sigma_h, sigma_h, 1.5 * sigma_h if sigma_u is None else sigma_u])
+    noise = rng.normal(0.0, 1.0, (n, 3)) * sigma
+    if gm_sigma:
+        phi = np.exp(-np.diff(out["t_gps"], prepend=out["t_gps"][0]) / gm_tau)
+        b = np.zeros((n, 3))
+        b[0] = rng.normal(0.0, gm_sigma, 3)
+        for k in range(1, n):
+            b[k] = phi[k] * b[k - 1] + gm_sigma * np.sqrt(1.0 - phi[k] ** 2) * rng.normal(0.0, 1.0, 3)
+        noise += b
+    out["p_gps"] = out["p_gps"] + noise
+    if sigma_vel:
+        out["v_gps"] = out["v_gps"] + rng.normal(0.0, sigma_vel, out["v_gps"].shape)
     return out
 
 

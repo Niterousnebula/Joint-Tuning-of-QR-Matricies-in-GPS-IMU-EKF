@@ -86,11 +86,6 @@ def main(dataset, out_dir=None, allow_unready=False, init_heading=None, gate=Non
           f"(vs GPS {row['delta_vs_gps']:+.3f} m)")
     print(f"  secondary: RMSE_v {row['rmse_v']:.3f} m, RMSE_3D {row['rmse_3d']:.3f} m, "
           f"mean NIS {row['mean_nis']:.2f} (expected {ekf.nis_dof(data)} for m = {ekf.nis_dof(data)})")
-    print(f"Robustness, Delta RMSE_h = perturbed - clean (whole flight): "
-          f"mean {row['delta_rmse_mean']:+.3f} m, max {row['delta_rmse_max']:+.3f} m")
-    for name in ekf.PERTURBATIONS:
-        print(f"  {name:<14} {row[f'rmse_{name}']:.3f} m   {row[f'delta_{name}']:+.3f} m "
-              f"({row[f'delta_pct_{name}']:+.2f} %)")
     print(f"Compute: N_eval {row['n_evals']}, T_total {row['t_total']:.1f} s, "
           f"T_eval {row['t_eval']:.1f} s (wall clock, hardware-dependent)")
 
