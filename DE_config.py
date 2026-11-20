@@ -1,8 +1,8 @@
 """Configuration for Differential Evolution (DE). Shared EKF files are untouched."""
 
-# 200 candidates: initial population + 9 trial generations = 2,000 evaluations per seed
-POPULATION_SIZE = 200
-MAX_EVALS = 2000
+# 100 candidates: initial population + 9 trial generations = 1,000 evaluations per seed
+POPULATION_SIZE = 100
+MAX_EVALS = 1000
 SEEDS = (1, 2, 3, 4, 5)
 N_WORKERS = 1              # CPU backend only
 BACKEND = "gpu"            # "gpu": each generation is one batched EKF pass; "cpu": filterpy reference
