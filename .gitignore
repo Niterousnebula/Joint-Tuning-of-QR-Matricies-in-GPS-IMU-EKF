@@ -19,3 +19,4 @@ processed_data/*
 results/.main.lock
 results_smoke/
 !processed_data/eth_gps2m_s0/
+.tile_cache/
