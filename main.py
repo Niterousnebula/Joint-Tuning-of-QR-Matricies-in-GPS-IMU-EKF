@@ -21,7 +21,8 @@ evaluations per seed, seeds 1-5, BACKEND = "gpu"). Per dataset:
     4. the dataset's table and convergence figure
 
 and finally results/summary/: the table over all datasets and the summary figures (one panel per
-dataset): convergence, and accuracy against convergence speed.
+dataset): convergence, and accuracy against convergence speed; and an OpenStreetMap map per dataset
+(plot_maps.py) with the ground truth, the GPS, the baseline EKF and each optimizer's best run.
 
 Resumable: a seed whose runs.csv row, convergence curve and incumbents file are complete is
 skipped, so the command can be stopped and started again. Every session is appended to
@@ -42,6 +43,7 @@ import numpy as np
 import pandas as pd
 
 import ekf
+import plot_maps
 import plot_response
 from make_noisy_gps import derived_id, make
 
@@ -295,6 +297,7 @@ def main():
     root = Path("results_smoke" if a.smoke else "results")
     if a.plots_only:
         plot_response.build_all(root, a.datasets, a.optimizers)
+        plot_maps.main(a.datasets, root)
         return
 
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -361,6 +364,7 @@ def main():
             gpu.clear_cache()
             say(f"  {ds} finished in {info['wall_clock_s'] / 3600:.2f} h")
         plot_response.summary(root, a.datasets, a.optimizers)
+        plot_maps.main(a.datasets, root)
         session["finished"] = datetime.now().isoformat(timespec="seconds")
         session["wall_clock_s"] = time.perf_counter() - t_all
         save_manifest()

@@ -121,6 +121,7 @@ HISA, on the `hisa` branch, searches a different decision vector (initial biases
 | `main.py` | Prepares the datasets, runs every optimizer on each and builds all outputs |
 | `make_noisy_gps.py` | Writes a derived dataset with white (and optionally Gauss-Markov) noise on its GPS |
 | `plot_response.py` | Tables, convergence figures and the accuracy-vs-convergence figure, from the results |
+| `plot_maps.py` | OpenStreetMap maps per dataset: ground truth, GPS, baseline EKF and each optimizer's best run (`map.png`, `map.html`) |
 | `run_baseline.py` | Evaluates `THETA0` through the same fitness and writes `results/baseline/` (`results/<dataset>/baseline/` for other datasets) |
 | `plot_trajectories.py` | Map of ground truth, GNSS and EKF trajectories in local ENU, with the error over time |
 
@@ -238,6 +239,22 @@ The best seed of each optimizer (log10 of the noise densities and variances; bou
 ![Accuracy vs convergence](results/summary/accuracy_vs_convergence.png)
 
 Per-dataset convergence with every seed: [`eth_gps2m_s0`](results/eth_gps2m_s0/convergence.png), [`playground00_gps64m_s0`](results/inavwhu/playground00_gps64m_s0/convergence.png), [`street00_gps64m_s0`](results/inavwhu/street00_gps64m_s0/convergence.png).
+
+### Maps
+
+Ground truth (black), the noisy GPS fixes (grey dots), the baseline EKF at `THETA0` (dashed) and the best seed of each optimizer, on OpenStreetMap (`plot_maps.py`; tracks rerun on the filterpy reference). Interactive versions you can pan, zoom and toggle: `map.html` in each dataset folder (download and open in a browser).
+
+**ETH, 2 m GPS noise:** every filter follows the streets; the tuned tracks sit slightly closer to the truth than the baseline.
+
+![ETH map](results/eth_gps2m_s0/map.png)
+
+**`playground00`, 64 m GPS noise:** the filters zig-zag at every 1 Hz fix, but the tuned tracks stay much closer to the running track than the baseline (26.4 m against 36.1 m).
+
+![playground00 map](results/inavwhu/playground00_gps64m_s0/map.png)
+
+**`street00`, 64 m GPS noise**
+
+![street00 map](results/inavwhu/street00_gps64m_s0/map.png)
 
 ## Reference results
 
@@ -547,7 +564,7 @@ Every run produces a row with these values, so the comparison can be laid out as
 | `results/<dataset>/validation/` | GPU vs filterpy check: `validation_table.csv`, `validation_summary.json` |
 | `results/<dataset>/baseline/` | `THETA0` through the same fitness: `runs.csv`, `convergence_seed0.csv` |
 | `results/<dataset>/<OPT>/` | `runs.csv` (one row per seed), `convergence_seed<s>.csv` (every evaluation: k, generation, fitness, best-so-far, time, θ), `incumbents_seed<s>.csv` (mean NIS of every best-so-far θ), and the PSO, DE and GWO live logs |
-| `results/<dataset>/` | `results_table.md`/`.csv`, `convergence.png` |
+| `results/<dataset>/` | `results_table.md`/`.csv`, `convergence.png`, `map.png`, `map.html` |
 | `results/summary/` | `results_table.md`/`.csv` (all datasets), `best_values.md`/`.csv` (best seed per optimizer and dataset, with θ), `convergence.png`, `accuracy_vs_convergence.png` |
 | `results/main.log`, `results/main_manifest.json` | Console output and per-session record |
 
