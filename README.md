@@ -242,7 +242,7 @@ Per-dataset convergence with every seed: [`eth_gps2m_s0`](results/eth_gps2m_s0/c
 
 ### Maps
 
-Ground truth (black), the noisy GPS fixes (grey dots), the baseline EKF at `THETA0` (dashed) and the best seed of each optimizer, on OpenStreetMap (`plot_maps.py`; tracks rerun on the filterpy reference). Interactive versions you can pan, zoom and toggle: `map.html` in each dataset folder (download and open in a browser).
+One map per filter for each dataset: the baseline EKF at `THETA0` (dashed) and the best seed of GA, PSO, DE and GWO, each drawn over the noisy GPS fixes (grey dots) and the ground truth (black) on OpenStreetMap (`plot_maps.py`; tracks rerun on the filterpy reference). An interactive version with all tracks in one map, which you can pan, zoom and toggle, is `map.html` in each dataset folder (download and open in a browser).
 
 **ETH, 2 m GPS noise:** every filter follows the streets; the tuned tracks sit slightly closer to the truth than the baseline.
 

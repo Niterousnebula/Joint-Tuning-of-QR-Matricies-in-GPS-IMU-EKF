@@ -4,7 +4,8 @@ the best tuned run of every optimizer.
     python plot_maps.py                                   # every dataset of main.DATASETS
     python plot_maps.py --datasets eth_gps2m_s0           # one dataset
 
-Writes results/<dataset>/map.png (static: OSM tiles under the tracks) and map.html (interactive:
+Writes results/<dataset>/map.png (static, OSM tiles: one map per filter, baseline, GA, PSO, DE and GWO,
+each with the GPS fixes and the ground truth) and map.html (interactive, all tracks in one map:
 pan, zoom and toggle tracks; needs a browser with internet). The EKF tracks are rerun on the CPU
 reference with the THETA0 and best thetas from results/<dataset>/<OPT>/runs.csv. Map tiles come from
 tile.openstreetmap.org and are cached in .tile_cache/; without internet the PNG is drawn without them.
@@ -125,33 +126,39 @@ def draw(dataset, root):
     gps_rmse = ekf.gps_rmse(data)
     out = root / dataset
 
-    # static PNG: framed on the ground truth (the noisy GPS cloud would hide the tracks)
-    fig, ax = plt.subplots(figsize=(10, 10))
+    # static PNG: one map per filter (baseline, GA, PSO, DE, GWO), each with the GPS fixes and the ground
+    # truth, framed on the ground truth (the noisy GPS cloud would hide the tracks)
     lat_min, lat_max, lon_min, lon_max = truth[0].min(), truth[0].max(), truth[1].min(), truth[1].max()
     pad_lat, pad_lon = 0.08 * (lat_max - lat_min) + 1e-4, 0.08 * (lon_max - lon_min) + 1e-4
     box = (lat_min - pad_lat, lat_max + pad_lat, lon_min - pad_lon, lon_max + pad_lon)
-    has_tiles = basemap(ax, *box)
-    mx, my = _merc(*gps)
-    ax.plot(mx, my, ".", ms=2, color=COLORS["gps"], alpha=0.5, label=f"GPS fixes (RMSE_h {gps_rmse:.2f} m)", zorder=2)
-    mx, my = _merc(*truth)
-    ax.plot(mx, my, color=COLORS["truth"], lw=2.2, label="ground truth", zorder=5)
-    for name, label, xy, rm in runs:
-        mx, my = _merc(*ll(xy))
-        noisy = gps_rmse > 10                       # 64 m GPS: tracks zig-zag at every fix, so draw them lighter
-        ax.plot(mx, my, color=COLORS[name], lw=0.7 if noisy else 1.3, alpha=0.55 if noisy else 1.0,
-                ls="--" if name == "baseline" else "-", label=f"{label} (RMSE_h {rm:.2f} m)", zorder=4)
     (xl, yb), (xr, yt) = _merc(box[0], box[2]), _merc(box[1], box[3])
-    ax.set_xlim(xl, xr)
-    ax.set_ylim(yb, yt)
-    ax.set_aspect("equal")
-    ax.set_xticks([])
-    ax.set_yticks([])
-    ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
-    ax.set_title(f"{dataset}: tracks on OpenStreetMap", fontsize=11)
-    if has_tiles:
-        ax.text(0.99, 0.005, "© OpenStreetMap contributors", transform=ax.transAxes, ha="right", va="bottom",
-                fontsize=7, bbox=dict(facecolor="white", alpha=0.7, lw=0))
-    fig.tight_layout()
+    cols = 3
+    rows = -(-len(runs) // cols)
+    panel = 6.0
+    fig, axes = plt.subplots(rows, cols, figsize=(cols * panel, rows * (panel * (yt - yb) / (xr - xl) + 0.6) + 0.6), squeeze=False)
+    for ax in axes.flat[len(runs):]:
+        ax.axis("off")
+    gx, gy = _merc(*gps)
+    tx, ty = _merc(*truth)
+    for ax, (name, label, xy, rm) in zip(axes.flat, runs):
+        has_tiles = basemap(ax, *box)
+        ax.plot(gx, gy, ".", ms=2, color=COLORS["gps"], alpha=0.5, label=f"GPS fixes ({gps_rmse:.2f} m)", zorder=2)
+        ax.plot(tx, ty, color=COLORS["truth"], lw=2.2, label="ground truth", zorder=5)
+        mx, my = _merc(*ll(xy))
+        ax.plot(mx, my, color=COLORS[name], lw=0.9 if gps_rmse > 10 else 1.5, ls="--" if name == "baseline" else "-",
+                label=f"EKF ({rm:.2f} m)", zorder=4)
+        ax.set_xlim(xl, xr)
+        ax.set_ylim(yb, yt)
+        ax.set_aspect("equal")
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.legend(loc="upper left", fontsize=8, framealpha=0.9)
+        ax.set_title(label.replace("EKF, ", "") + f": RMSE_h {rm:.2f} m", fontsize=10)
+        if has_tiles:
+            ax.text(0.99, 0.005, "© OpenStreetMap contributors", transform=ax.transAxes, ha="right", va="bottom",
+                    fontsize=6, bbox=dict(facecolor="white", alpha=0.7, lw=0))
+    fig.suptitle(f"{dataset}: GPS fixes, ground truth and each filter on OpenStreetMap", fontsize=12)
+    fig.tight_layout(rect=(0, 0, 1, 0.97))
     fig.savefig(out / "map.png", dpi=150)
     plt.close(fig)
     print(f"wrote {out / 'map.png'}")
