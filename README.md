@@ -40,7 +40,7 @@ python main.py
 | `--plan` | Prepares the datasets, then prints what would run and a time estimate |
 | `--smoke` | Tiny budget (population 4, 8 evaluations, seed 1) into `results_smoke/`, to check the pipeline end to end |
 | `--plots-only` | Rebuilds the tables and figures from `results/` |
-| `--datasets`, `--optimizers` | A subset, e.g. `--datasets eth_gps2m_s0 --optimizers PSO GWO` |
+| `--datasets`, `--optimizers` | A subset, e.g. `--datasets eth_gps16m_nov_s0 --optimizers PSO GWO` |
 
 It runs from `main` with a CUDA build of PyTorch and refuses to start on another branch. It is resumable: a seed whose `runs.csv` row, convergence curve and incumbents file are complete is skipped, so it can be stopped (Ctrl+C) and started again. A lock file (`results/.main.lock`) stops two runs from sharing the GPU. Everything printed goes to `results/main.log`, and every session is recorded in `results/main_manifest.json` (settings, versions, GPU, git commit, each dataset's `THETA0`, timings, checks).
 
@@ -54,7 +54,7 @@ It first prepares the datasets: a source missing from `processed_data/` is proce
 
 Then it writes `results/summary/`: one table over all datasets, the best values, a convergence figure and an accuracy-vs-convergence figure, one panel per dataset.
 
-**Time.** On an RTX 4060 Laptop GPU the run took 10.0 h: 0.66 h for ETH, 4.61 h for `playground00` and 4.76 h for `street00` (`--plan` estimated 6.0 h; it scales from batches of 200 candidates, and at population 100 a candidate costs about 1.5 times as much). An iNav-WHU candidate costs about 7 times an ETH one (265,000 to 280,000 IMU predictions at 200 Hz against 27,000 at 10 Hz). The previous run, on the clean datasets and with robustness, took 14.0 h.
+**Time.** On an RTX 4060 Laptop GPU the run took 9.77 h: 0.63 h for ETH, 4.43 h for `playground00` and 4.68 h for `street00` (`--plan` estimated 6.0 h; it scales from batches of 200 candidates, and at population 100 a candidate costs about 1.5 times as much).
 
 ## GPS noise and per-dataset THETA0
 
@@ -68,12 +68,14 @@ Then it writes `results/summary/`: one table over all datasets, the best values,
 | **2** | **4.23 → 3.77 m (1.7 %)** | 2.58 → 1.83 m (10.1 %) | 2.52 → 1.72 m (10.0 %) |
 | 4 | 5.79 → 3.94 m (0.4 %) | 4.76 → 3.03 m (10.9 %) | 4.72 → 3.57 m (10.1 %) |
 | 8 | 9.87 → 4.19 m (0 %) | 9.30 → 5.43 m (9.5 %) | 9.28 → 4.81 m (12.4 %) |
-| 16 | 18.8 → 4.64 m (0 %) | 18.5 → 9.35 m (11.7 %) | 18.5 → 8.85 m (12.2 %) |
+| **16** | 18.8 → 4.64 m (0 %) | **18.5 → 9.35 m (11.7 %)** | **18.5 → 8.85 m (12.2 %)** |
 | 32 | 37.2 → 5.43 m (0.8 %) | 36.9 → 16.5 m (15.3 %) | 37.0 → 17.0 m (17.3 %) |
-| **64** | – | **73.7 → 28.5 m (21.1 %)** | **73.9 → 30.8 m (13.0 %)** |
+| 64 | – | 73.7 → 28.5 m (21.1 %) | 73.9 → 30.8 m (13.0 %) |
 | 128 | – | 147 → 52.1 m (19.9 %), **1 of 200 diverged** | 148 → 54.3 m (17.9 %) |
 
-So the benchmark uses **`eth_gps2m_s0`** (σ = 2 m), **`inavwhu/playground00_gps64m_s0`** and **`inavwhu/street00_gps64m_s0`** (σ = 64 m). On ETH the tuning gain vanishes above 2 m because ETH's clean GPS velocity dominates the filter; on iNav-WHU (no GPS velocity) the gain keeps growing, and the first divergence appears at 128 m.
+So the benchmark uses σ = 16 m on every dataset: **`eth_gps16m_nov_s0`**, **`inavwhu/playground00_gps16m_s0`** and **`inavwhu/street00_gps16m_s0`**, a raw GPS error of 18.5–18.8 m, in the 15–20 m range of a poor receiver. The gain keeps growing with the noise on iNav-WHU and the first divergence appears at 128 m, but noise that large is not a realistic receiver.
+
+**ETH is position-only.** iNav-WHU's F9P reports no velocity, but ETH's GPS does, and with clean velocity the filter barely needs position: at σ = 16 m tuning gains 0 %, and with 0.5 to 8 m/s of velocity noise at most 0.9 % (THETA0 plus 199 random candidates). With the velocity dropped (`make_noisy_gps.py --no-velocity`, `_nov` in the name) ETH at 16 m behaves like iNav-WHU: 18.8 m raw, 10.8 m at `THETA0`, and tuning gains 4.7 %. All three datasets then use the same GPS channels (position, 3 NIS degrees of freedom). Earlier runs used ETH at 2 m with velocity and iNav-WHU at 64 m; their results are in the git history.
 
 **Per-dataset THETA0.** `THETA0` and its bounds used to come from the ETH sensor for every dataset, which put the iNav-WHU sensor's own noise outside the search. Now `ekf.load_data` gives each dataset its own `THETA0` (`ekf.data.dataset_theta0`) and re-centres the bounds on it (`THETA0` ± 3 for Q, ± 2 for R; `ekf.tuning.set_search_space`), so each dataset's filter starts from, and searches around, its own sensors:
 
@@ -84,9 +86,9 @@ So the benchmark uses **`eth_gps2m_s0`** (σ = 2 m), **`inavwhu/playground00_gps
 
 | Dataset | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` |
 |---|---:|---:|---:|---:|---:|---:|---:|
-| `eth_gps2m_s0` | 0.20 | −3.00 | −5.00 | −8.00 | 1.15 | 1.61 | 0.00 |
-| `playground00_gps64m_s0` | −5.40 | −8.32 | −5.00 | −8.00 | 3.61 | 3.96 | 0.00 |
-| `street00_gps64m_s0` | −5.57 | −8.84 | −5.00 | −8.00 | 3.61 | 3.96 | 0.00 |
+| `eth_gps16m_nov_s0` | 0.20 | −3.00 | −5.00 | −8.00 | 2.42 | 2.78 | 0.00 (unused: no velocity) |
+| `playground00_gps16m_s0` | −5.40 | −8.32 | −5.00 | −8.00 | 2.41 | 2.76 | 0.00 |
+| `street00_gps16m_s0` | −5.57 | −8.84 | −5.00 | −8.00 | 2.41 | 2.76 | 0.00 |
 
 Every `runs.csv` row records the dataset's `THETA0` (`theta0_<name>` columns).
 
@@ -119,6 +121,7 @@ HISA, on the `hisa` branch, searches a different decision vector (initial biases
 | `ekf/response.py` | Mean NIS of every incumbent of a run (on the GPU), and the accuracy-NIS-compute path of a seed |
 | `GA.py`, `PSO.py`, `DE.py`, `GWO.py` | The optimizers; settings in `<NAME>_config.py` |
 | `main.py` | Prepares the datasets, runs every optimizer on each and builds all outputs |
+| `reset.py` | Removes the generated data (results, noisy datasets, map tiles) so the next run starts from scratch |
 | `make_noisy_gps.py` | Writes a derived dataset with white (and optionally Gauss-Markov) noise on its GPS |
 | `plot_response.py` | Tables, convergence figures and the accuracy-vs-convergence figure, from the results |
 | `plot_maps.py` | OpenStreetMap maps per dataset: ground truth, GPS, baseline EKF and each optimizer's best run (`map.png`, `map.html`) |
@@ -129,6 +132,7 @@ HISA, on the `hisa` branch, searches a different decision vector (initial biases
 
 ```bash
 pip install -r requirements.txt
+python reset.py                                 # remove earlier results and noisy datasets (asks first)
 python main.py --plan                           # prepare the datasets; what the benchmark will do, and how long
 python main.py                                  # the full benchmark
 
@@ -173,60 +177,61 @@ costs = cost_fn.evaluate_many(population)         # 200 candidates -> one batche
 
 ## Results
 
-`python main.py` on an RTX 4060 Laptop GPU, 20 November 2026: GA, PSO, DE and GWO, population 100 × 10 generations = 1,000 evaluations × seeds 1–5, on `eth_gps2m_s0` (ETH, 2 m GPS noise), `playground00_gps64m_s0` and `street00_gps64m_s0` (iNav-WHU, 64 m GPS noise), each starting from its own `THETA0`. Total 10.0 h (ETH 0.66 h, `playground00` 4.61 h, `street00` 4.76 h). The GPU-vs-filterpy check passed on all three datasets (largest scaled difference 3.9 × 10⁻⁸; one numerically chaotic candidate on `street00` was excluded, see [Running everything](#running-everything)). Every seed used exactly 1,000 evaluations. All numbers are re-scored by the filterpy reference; search and reference agree to within 1.4 × 10⁻¹¹ m. Full tables: [`results/summary/results_table.md`](results/summary/results_table.md) and [`results/summary/best_values.md`](results/summary/best_values.md).
+`python main.py` on an RTX 4060 Laptop GPU, 20–21 November 2026: GA, PSO, DE and GWO, population 100 × 10 generations = 1,000 evaluations × seeds 1–5, on `eth_gps16m_nov_s0`, `playground00_gps16m_s0` and `street00_gps16m_s0` (16 m GPS noise, position-only, raw GPS error 18.5–18.8 m), each starting from its own `THETA0`. Total 9.77 h (ETH 0.63 h, `playground00` 4.43 h, `street00` 4.68 h). The GPU-vs-filterpy check passed on all three datasets (largest scaled difference 3.4 × 10⁻⁹, no chaotic candidates), and every seed used exactly 1,000 evaluations. All numbers are re-scored by the filterpy reference. Full tables: [`results/summary/results_table.md`](results/summary/results_table.md) and [`results/summary/best_values.md`](results/summary/best_values.md).
 
 ### Headline numbers
 
-Mean ± std over 5 seeds. Mean NIS of a consistent filter: 6 on ETH, 3 on iNav-WHU (position-only GPS).
+Mean ± std over 5 seeds. A consistent filter has mean NIS 3 (position-only GPS).
 
-| Dataset | Method | RMSE_h (m) | vs baseline (m) | vs noisy GPS (m) | Mean NIS | Evals to 99 % | Time per seed |
+| Dataset (raw GPS error) | Method | RMSE_h (m) | vs baseline (m) | vs raw GPS (m) | Mean NIS | Evals to 99 % | Time per seed |
 |---|---|---:|---:|---:|---:|---:|---:|
-| ETH, 2 m (raw GPS 4.23 m) | Baseline (`THETA0`) | 3.833 | – | −0.394 | 1.72 | – | – |
-| | GA | 3.751 ± 0.006 | −0.082 | −0.476 | 4.11 | 611 ± 232 | 1.8 min |
-| | **PSO** | **3.731 ± 0.027** | **−0.102** | **−0.496** | 5.02 | 939 ± 49 | 1.8 min |
-| | DE | 3.758 ± 0.006 | −0.076 | −0.470 | 3.79 | 391 ± 294 | 1.7 min |
-| | GWO | 3.764 ± 0.019 | −0.070 | −0.464 | 9.67 | 671 ± 350 | 1.8 min |
-| `playground00`, 64 m (raw GPS 73.7 m) | Baseline (`THETA0`) | 36.094 | – | −37.64 | 2.96 | – | – |
-| | GA | 26.522 ± 0.140 | −9.573 | −47.21 | 0.75 | 501 ± 175 | 13.0 min |
-| | PSO | 26.455 ± 0.105 | −9.639 | −47.28 | 0.86 | 580 ± 278 | 12.9 min |
-| | DE | 26.723 ± 0.125 | −9.371 | −47.01 | 0.53 | 445 ± 112 | 12.2 min |
-| | **GWO** | **26.447 ± 0.040** | **−9.647** | **−47.29** | 0.86 | 777 ± 187 | 12.2 min |
-| `street00`, 64 m (raw GPS 73.9 m) | Baseline (`THETA0`) | 35.394 | – | −38.50 | 2.96 | – | – |
-| | **GA** | **29.714 ± 0.251** | **−5.680** | **−44.18** | 2.76 | 759 ± 153 | 12.9 min |
-| | PSO | 29.726 ± 0.346 | −5.668 | −44.17 | 2.82 | 355 ± 317 | 12.9 min |
-| | DE | 30.178 ± 0.134 | −5.216 | −43.72 | 2.12 | 595 ± 388 | 13.2 min |
-| | GWO | 29.830 ± 0.326 | −5.564 | −44.07 | 2.60 | 876 ± 84 | 13.5 min |
+| ETH (18.83 m) | Baseline (`THETA0`) | 10.818 | – | −8.01 | 2.99 | – | – |
+| | GA | 10.119 ± 0.049 | −0.699 | −8.71 | 48.9 | 817 ± 169 | 1.7 min |
+| | PSO | 10.155 ± 0.068 | −0.663 | −8.67 | 7.5 | 536 ± 389 | 1.7 min |
+| | DE | 10.114 ± 0.200 | −0.704 | −8.71 | 193.3 | 706 ± 201 | 1.7 min |
+| | **GWO** | **10.113 ± 0.059** | **−0.705** | **−8.72** | 5.9 | 827 ± 79 | 1.7 min |
+| `playground00` (18.48 m) | Baseline (`THETA0`) | 10.587 | – | −7.89 | 2.93 | – | – |
+| | GA | 9.241 ± 0.025 | −1.346 | −9.24 | 0.98 | 658 ± 259 | 12.3 min |
+| | **PSO** | **9.231 ± 0.008** | **−1.357** | **−9.25** | 0.42 | 384 ± 263 | 12.3 min |
+| | DE | 9.277 ± 0.050 | −1.310 | −9.20 | 0.55 | 429 ± 281 | 12.3 min |
+| | GWO | 9.268 ± 0.028 | −1.320 | −9.21 | 0.45 | 511 ± 164 | 12.3 min |
+| `street00` (18.49 m) | Baseline (`THETA0`) | 10.072 | – | −8.42 | 2.90 | – | – |
+| | GA | 8.781 ± 0.007 | −1.291 | −9.71 | 0.11 | 719 ± 129 | 13.0 min |
+| | PSO | 8.778 ± 0.006 | −1.294 | −9.71 | 0.09 | 261 ± 111 | 13.0 min |
+| | DE | 8.788 ± 0.006 | −1.284 | −9.70 | 0.21 | 558 ± 272 | 13.0 min |
+| | **GWO** | **8.777 ± 0.007** | **−1.295** | **−9.71** | 0.11 | 479 ± 160 | 13.0 min |
 
 ### Best values found
 
-The best seed of each optimizer (log10 of the noise densities and variances; bounds are the dataset's `THETA0` ± 3 for Q and ± 2 for R).
+The best seed of each optimizer (log10 of the noise densities and variances; bounds are the dataset's `THETA0` ± 3 for Q and ± 2 for R; `log_r_vel` has no effect, as there is no GPS velocity).
 
-| Dataset | Optimizer (seed) | RMSE_h (m) | NIS | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` |
-|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| ETH, 2 m | `THETA0` | 3.833 | 1.72 | 0.20 | −3.00 | −5.00 | −8.00 | 1.15 | 1.61 | 0.00 |
-| | GA (5) | 3.744 | 0.73 | 2.44 | −6.00 | −4.65 | −10.72 | 1.29 | 1.75 | −1.46 |
-| | **PSO (1)** | **3.689** | 1.47 | 1.17 | −5.29 | −5.58 | −9.42 | 1.05 | 1.68 | 0.86 |
-| | DE (5) | 3.750 | 0.20 | 3.20 | −6.00 | −6.79 | −11.00 | 1.68 | 3.18 | −1.40 |
-| | GWO (5) | 3.744 | 5.05 | 3.20 | −4.85 | −5.32 | −11.00 | 1.91 | 0.06 | −1.53 |
-| `playground00`, 64 m | `THETA0` | 36.094 | 2.96 | −5.40 | −8.32 | −5.00 | −8.00 | 3.61 | 3.96 | 0.00 |
-| | GA (1) | 26.416 | 0.99 | −5.67 | −6.95 | −5.88 | −8.17 | 5.57 | 3.98 | 0.68 |
-| | PSO (4) | 26.395 | 0.99 | −5.10 | −8.23 | −6.15 | −8.32 | 5.47 | 3.98 | 1.13 |
-| | DE (5) | 26.601 | 0.91 | −8.40 | −9.67 | −5.81 | −8.40 | 5.32 | 4.02 | 2.00 |
-| | **GWO (5)** | **26.389** | 0.86 | −3.90 | −8.41 | −6.08 | −8.12 | 5.61 | 4.04 | −0.80 |
-| `street00`, 64 m | `THETA0` | 35.394 | 2.96 | −5.57 | −8.84 | −5.00 | −8.00 | 3.61 | 3.96 | 0.00 |
-| | GA (2) | 29.544 | 2.91 | −4.46 | −5.84 | −5.91 | −9.54 | 4.83 | 3.52 | 0.70 |
-| | **PSO (3)** | **29.462** | 2.83 | −3.11 | −5.84 | −5.86 | −9.33 | 4.87 | 3.53 | −0.45 |
-| | DE (4) | 29.965 | 2.34 | −2.57 | −5.84 | −6.62 | −9.07 | 4.68 | 3.62 | −0.80 |
-| | GWO (3) | 29.543 | 2.47 | −5.00 | −5.84 | −5.58 | −9.40 | 4.81 | 3.59 | −0.63 |
+| Dataset | Optimizer (seed) | RMSE_h (m) | NIS | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` |
+|---|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| ETH | `THETA0` | 10.818 | 2.99 | 0.20 | −3.00 | −5.00 | −8.00 | 2.42 | 2.78 |
+| | GA (3) | 10.053 | 16.98 | −2.80 | −3.23 | −2.35 | −7.08 | 1.76 | 1.86 |
+| | PSO (1) | 10.071 | 12.93 | −0.13 | −3.34 | −2.00 | −6.90 | 1.70 | 2.29 |
+| | **DE (1)** | **9.952** | 53.82 | 3.20 | −0.81 | −2.00 | −11.00 | 4.42 | 0.78 |
+| | GWO (2) | 10.046 | 9.95 | −0.20 | −3.31 | −2.00 | −7.31 | 1.71 | 4.49 |
+| `playground00` | `THETA0` | 10.587 | 2.93 | −5.40 | −8.32 | −5.00 | −8.00 | 2.41 | 2.76 |
+| | **GA (1)** | **9.221** | 1.22 | −6.60 | −11.20 | −4.82 | −8.61 | 3.56 | 2.72 |
+| | PSO (5) | 9.226 | 0.56 | −5.38 | −8.56 | −4.74 | −8.52 | 3.60 | 3.12 |
+| | DE (2) | 9.232 | 0.25 | −5.65 | −10.65 | −5.52 | −8.45 | 3.63 | 3.66 |
+| | GWO (2) | 9.236 | 0.14 | −7.60 | −11.32 | −4.89 | −8.61 | 3.61 | 4.76 |
+| `street00` | `THETA0` | 10.072 | 2.90 | −5.57 | −8.84 | −5.00 | −8.00 | 2.41 | 2.76 |
+| | GA (2) | 8.772 | 0.08 | −4.20 | −5.84 | −8.00 | −7.56 | 4.39 | 4.00 |
+| | **PSO (4)** | **8.769** | 0.09 | −6.48 | −5.87 | −8.00 | −7.55 | 4.41 | 3.90 |
+| | DE (2) | 8.782 | 0.10 | −6.58 | −8.29 | −8.00 | −7.49 | 4.41 | 3.84 |
+| | **GWO (2)** | **8.769** | 0.10 | −6.00 | −5.84 | −8.00 | −7.53 | 4.40 | 3.84 |
 
 ### What the results show
 
-1. **With noisy GPS the tuning matters.** On iNav-WHU every optimizer cuts the error by 5–10 m against `THETA0` (16–27 %) and by about 45 m against the noisy GPS. On ETH, whose GPS velocity is clean, the gain over `THETA0` is 0.07–0.10 m (about 2–3 %).
-2. **PSO and GWO are the most accurate, DE the least.** PSO leads on ETH (3.731 m) and has the best single runs on ETH and `street00`; GWO leads on `playground00` with the smallest spread (± 0.04 m); GA leads `street00` on the mean, 0.01 m ahead of PSO. DE ends last on every dataset, 0.3–0.5 m behind on iNav-WHU, but converges early (391–595 evaluations).
-3. **The filter trusts the IMU much more after tuning.** On iNav-WHU the best runs raise `r_xy` by 1 to 2 decades over `THETA0` (to 10^4.7–10^5.6 m², an assumed GPS σ of 220–640 m against the true 64 m), so they lean on the IMU between fixes. On `playground00` this reaches the upper bound (GWO 5.61), and mean NIS drops below the consistent 3 (about 0.9); on `street00` it stays near 3.
-4. **Several optimum values sit on a bound.** On ETH `log_q_acc` (3.20, DE and GWO), `log_q_gyro` (−6.00, GA and DE) and `log_q_bg` (−11.00, DE and GWO); on `street00` `log_q_gyro` (−5.84, all four); on `playground00` `log_r_xy` (GWO). Wider bounds could move the optimum further.
-5. **The budget is not used up.** The convergence curves still fall at 1,000 evaluations on all three datasets, most clearly for PSO on ETH and for all four on `street00`.
-6. **Compute.** A seed takes 1.8 min on ETH and 12–13.5 min on iNav-WHU. At population 100 the GPU batches are half the size of the 2,000-evaluation run, so a candidate costs about 1.5 times as much as at population 200; the whole benchmark took 10.0 h against the 6.0 h estimate.
+1. **The filter halves the GPS error, and tuning adds 6–13 %.** With 16 m GPS noise every filter cuts the raw GPS error of about 18.5 m to 8.8–10.2 m. Tuning Q and R improves on `THETA0` by about 0.70 m (6.5 %) on ETH and 1.3 m (12.8–12.9 %) on both iNav-WHU drives.
+2. **The four optimizers end almost level.** On iNav-WHU the means differ by at most 0.05 m, about the seed-to-seed spread; PSO is best on `playground00` (9.231 m) and GWO, PSO and GA tie on `street00` (8.777–8.781 m). On ETH GWO, DE and GA lie within 0.006 m (10.113–10.119 m) and PSO 0.04 m behind, but DE varies most between seeds (± 0.20 m) while also finding the best single run (9.952 m).
+3. **PSO converges fastest.** On iNav-WHU PSO reaches 99 % of its improvement after 384 and 261 evaluations, against 479–719 for the others, and has the smallest spread on `playground00` (± 0.008 m).
+4. **The tuned filters are not consistent.** On iNav-WHU mean NIS falls from about 3 at `THETA0` to 0.1–1.0 (underconfident: R grows to about 10^4.4 m² on `street00`, an assumed GPS σ of about 160 m against the true 16 m, so the filter leans on the IMU). On ETH it rises to 6–193 (overconfident), most for DE and GA.
+5. **Overconfident DE runs on ETH are chaotic.** For DE seeds 2 and 3 (mean NIS 373 and 279) the GPU search and the filterpy reference disagree by 0.009 and 0.35 m on the same θ, the numerical chaos described in [Running everything](#running-everything); the table reports the reference values, 10.142 and 10.448 m. Every other run agrees to within 10⁻¹² m.
+6. **Several optimum values sit on a bound.** On `street00` all four put `log_q_ba` at its lower bound −8 and GA and GWO put `log_q_gyro` at its upper bound −5.84; on ETH three put `log_q_ba` at its upper bound −2, and DE also hits `log_q_acc` 3.20 and `log_q_bg` −11; on `playground00` GWO's `log_q_gyro` sits at its lower bound −11.32.
+7. **Compute.** A seed takes 1.7 min on ETH and 12.3–13 min on iNav-WHU; the run took 9.77 h against the 6.0 h `--plan` estimate (batches of 100 are less efficient than the 200 the estimate assumes).
 
 ### Graphs
 
@@ -238,23 +243,23 @@ The best seed of each optimizer (log10 of the noise densities and variances; bou
 
 ![Accuracy vs convergence](results/summary/accuracy_vs_convergence.png)
 
-Per-dataset convergence with every seed: [`eth_gps2m_s0`](results/eth_gps2m_s0/convergence.png), [`playground00_gps64m_s0`](results/inavwhu/playground00_gps64m_s0/convergence.png), [`street00_gps64m_s0`](results/inavwhu/street00_gps64m_s0/convergence.png).
+Per-dataset convergence with every seed: [`eth_gps16m_nov_s0`](results/eth_gps16m_nov_s0/convergence.png), [`playground00_gps16m_s0`](results/inavwhu/playground00_gps16m_s0/convergence.png), [`street00_gps16m_s0`](results/inavwhu/street00_gps16m_s0/convergence.png).
 
 ### Maps
 
 One map per filter for each dataset: the baseline EKF at `THETA0` (dashed) and the best seed of GA, PSO, DE and GWO, each drawn over the noisy GPS fixes (grey dots) and the ground truth (black) on OpenStreetMap (`plot_maps.py`; tracks rerun on the filterpy reference). An interactive version with all tracks in one map, which you can pan, zoom and toggle, is `map.html` in each dataset folder (download and open in a browser).
 
-**ETH, 2 m GPS noise:** every filter follows the streets; the tuned tracks sit slightly closer to the truth than the baseline.
+**ETH:** every filter follows the streets through the 18.8 m GPS cloud; the tuned tracks hug the truth more tightly than the baseline.
 
-![ETH map](results/eth_gps2m_s0/map.png)
+![ETH map](results/eth_gps16m_nov_s0/map.png)
 
-**`playground00`, 64 m GPS noise:** the filters zig-zag at every 1 Hz fix, but the tuned tracks stay much closer to the running track than the baseline (26.4 m against 36.1 m).
+**`playground00`**
 
-![playground00 map](results/inavwhu/playground00_gps64m_s0/map.png)
+![playground00 map](results/inavwhu/playground00_gps16m_s0/map.png)
 
-**`street00`, 64 m GPS noise**
+**`street00`**
 
-![street00 map](results/inavwhu/street00_gps64m_s0/map.png)
+![street00 map](results/inavwhu/street00_gps16m_s0/map.png)
 
 ## Reference results
 
@@ -568,7 +573,7 @@ Every run produces a row with these values, so the comparison can be laid out as
 | `results/summary/` | `results_table.md`/`.csv` (all datasets), `best_values.md`/`.csv` (best seed per optimizer and dataset, with θ), `convergence.png`, `accuracy_vs_convergence.png` |
 | `results/main.log`, `results/main_manifest.json` | Console output and per-session record |
 
-`<dataset>` is `eth_gps2m_s0`, `inavwhu/playground00_gps64m_s0` or `inavwhu/street00_gps64m_s0`.
+`<dataset>` is `eth_gps16m_nov_s0`, `inavwhu/playground00_gps16m_s0` or `inavwhu/street00_gps16m_s0`.
 
 **Summary figures (one panel per dataset).** `convergence.png` shows each optimizer's median best-so-far RMSE_h against evaluations, with a band from its best to its worst seed. `accuracy_vs_convergence.png` puts final RMSE_h against evaluations to 99 % of improvement: one dot per seed, one diamond per optimizer mean, mean NIS in the legend.
 

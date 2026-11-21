@@ -26,15 +26,15 @@ import ekf
 from ekf.data import PROCESSED_DIR
 
 
-def derived_id(dataset, sigma, gm_sigma, gm_tau, seed):
-    tag = f"gps{sigma:g}m" + (f"_gm{gm_sigma:g}m{gm_tau:g}s" if gm_sigma else "")
+def derived_id(dataset, sigma, gm_sigma, gm_tau, seed, drop_vel=False):
+    tag = f"gps{sigma:g}m" + (f"_gm{gm_sigma:g}m{gm_tau:g}s" if gm_sigma else "") + ("_nov" if drop_vel else "")
     return f"{dataset}_{tag}_s{seed}"
 
 
-def make(dataset, sigma, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0, seed=0):
+def make(dataset, sigma, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0, seed=0, drop_vel=False):
     data = ekf.load_data(dataset)
-    noisy = ekf.degrade_gps(data, sigma, sigma_u, sigma_vel, gm_sigma, gm_tau, seed)
-    new_id = derived_id(dataset, sigma, gm_sigma, gm_tau, seed)
+    noisy = ekf.degrade_gps(data, sigma, sigma_u, sigma_vel, gm_sigma, gm_tau, seed, drop_vel)
+    new_id = derived_id(dataset, sigma, gm_sigma, gm_tau, seed, drop_vel)
     out = PROCESSED_DIR / new_id
     out.mkdir(parents=True, exist_ok=True)
 
@@ -51,7 +51,7 @@ def make(dataset, sigma, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0,
                  + (f", {gm_sigma:g} m / {gm_tau:g} s Gauss-Markov" if gm_sigma else "") + f", seed {seed})",
         "derived_from": dataset,
         "gps_noise": {"sigma_h_m": sigma, "sigma_u_m": 1.5 * sigma if sigma_u is None else sigma_u,
-                      "sigma_vel_ms": sigma_vel, "gm_sigma_m": gm_sigma, "gm_tau_s": gm_tau, "seed": seed,
+                      "sigma_vel_ms": sigma_vel, "velocity_dropped": bool(drop_vel), "gm_sigma_m": gm_sigma, "gm_tau_s": gm_tau, "seed": seed,
                       "raw_gps_rmse_h_clean_m": rmse_clean, "raw_gps_rmse_h_noisy_m": rmse_noisy},
     })
     if "std_e" in gps.columns:
@@ -70,11 +70,12 @@ def main():
     p.add_argument("--vel-sigma", type=float, default=0.0, help="white GPS velocity noise, m/s (default 0)")
     p.add_argument("--gm-sigma", type=float, default=0.0, help="Gauss-Markov error std per axis, m (default 0)")
     p.add_argument("--gm-tau", type=float, default=60.0, help="Gauss-Markov correlation time, s (default 60)")
+    p.add_argument("--no-velocity", action="store_true", help="drop GPS velocity (position-only fixes)")
     p.add_argument("--seed", type=int, nargs="+", default=[0])
     a = p.parse_args()
     for sigma in a.sigma:
         for seed in a.seed:
-            make(a.dataset, sigma, a.sigma_u, a.vel_sigma, a.gm_sigma, a.gm_tau, seed)
+            make(a.dataset, sigma, a.sigma_u, a.vel_sigma, a.gm_sigma, a.gm_tau, seed, a.no_velocity)
 
 
 if __name__ == "__main__":

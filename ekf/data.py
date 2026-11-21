@@ -219,7 +219,7 @@ def perturb(data, gps_sigma=0.0, vel_sigma=0.0, accel_sigma=0.0, gyro_sigma=0.0,
     return out
 
 
-def degrade_gps(data, sigma_h, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0, seed=0):
+def degrade_gps(data, sigma_h, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau=60.0, seed=0, drop_vel=False):
     """Copy of `data` with the GPS degraded to a lower-grade receiver; IMU and ground truth unchanged.
 
     Each position axis gets white noise (sigma_h east/north, sigma_u up, default 1.5 * sigma_h) plus,
@@ -227,6 +227,7 @@ def degrade_gps(data, sigma_h, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau
     time gm_tau, discretised exactly over the real interval between fixes:
         b_k = exp(-dt/tau) b_{k-1} + gm_sigma sqrt(1 - exp(-2 dt/tau)) n_k.
     Velocity channels (when present) get white noise sigma_vel. A missing channel (NaN) stays NaN.
+    drop_vel removes GPS velocity altogether (NaN), so the filter updates on position only.
     The same seed always gives the same copy.
     """
     rng = np.random.default_rng(seed)
@@ -244,6 +245,8 @@ def degrade_gps(data, sigma_h, sigma_u=None, sigma_vel=0.0, gm_sigma=0.0, gm_tau
     out["p_gps"] = out["p_gps"] + noise
     if sigma_vel:
         out["v_gps"] = out["v_gps"] + rng.normal(0.0, sigma_vel, out["v_gps"].shape)
+    if drop_vel:
+        out["v_gps"] = np.full_like(out["v_gps"], np.nan)
     return out
 
 

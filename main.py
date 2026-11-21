@@ -47,11 +47,13 @@ import plot_maps
 import plot_response
 from make_noisy_gps import derived_id, make
 
-# White GPS position noise per dataset (m, horizontal; vertical 1.5x, seed 0): the largest at which
-# nothing diverges, the filter still beats the noisy GPS and tuning still beats THETA0 by > 1 %
+# White GPS position noise per dataset (m, horizontal; vertical 1.5x, seed 0): 16 m, a raw GPS error of
+# about 18.5 m (a poor receiver). Every dataset is position-only: iNav-WHU's F9P has no velocity, and ETH's
+# velocity is dropped (with it, the clean velocity carries the filter and tuning gains < 1 %).
 # (README, "GPS noise").
-NOISE = {"eth": 2.0, "inavwhu/playground00": 64.0, "inavwhu/street00": 64.0}
-DATASETS = [derived_id(source, sigma, 0.0, 60.0, 0) for source, sigma in NOISE.items()]
+NOISE = {"eth": 16.0, "inavwhu/playground00": 16.0, "inavwhu/street00": 16.0}
+DROP_VELOCITY = {"eth"}
+DATASETS = [derived_id(source, sigma, 0.0, 60.0, 0, source in DROP_VELOCITY) for source, sigma in NOISE.items()]
 OPTIMIZERS = ["GA", "PSO", "DE", "GWO"]
 LIVE_LOGS = {"PSO": "pso_log.csv", "DE": "de_log.csv", "GWO": "gwo_log.csv"}   # GA keeps no live log
 SMOKE = {"population_size": 4, "max_evals": 8, "seeds": (1,), "validate": 4}
@@ -117,14 +119,16 @@ def check_configs():
 def prepare(datasets):
     """Make sure every dataset is processed: raw_data/ -> processed_data/, then the noisy copy."""
     for source, sigma in NOISE.items():
-        folder = ekf.PROCESSED_DIR / derived_id(source, sigma, 0.0, 60.0, 0)
+        drop = source in DROP_VELOCITY
+        folder = ekf.PROCESSED_DIR / derived_id(source, sigma, 0.0, 60.0, 0, drop)
         if folder.name not in [Path(d).name for d in datasets]:
             continue
         meta = folder / "meta.json"
         noise = json.loads(meta.read_text()).get("gps_noise", {}) if meta.is_file() else {}
         # the folder name does not show velocity or Gauss-Markov noise, so check the recorded settings
-        if (noise.get("sigma_h_m"), noise.get("sigma_vel_ms"), noise.get("gm_sigma_m"), noise.get("seed")) != (sigma, 0.0, 0.0, 0):
-            make(source, sigma)                         # processes the source from raw_data/ first if needed
+        if (noise.get("sigma_h_m"), noise.get("sigma_vel_ms"), noise.get("gm_sigma_m"), noise.get("seed"),
+                noise.get("velocity_dropped", False)) != (sigma, 0.0, 0.0, 0, drop):
+            make(source, sigma, drop_vel=drop)          # processes the source from raw_data/ first if needed
     for ds in datasets:
         if not (ekf.PROCESSED_DIR / ds / "meta.json").is_file():
             ekf.load_data(ds)                           # a clean dataset: processed from raw_data/
