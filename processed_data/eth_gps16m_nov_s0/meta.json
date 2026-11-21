@@ -1,6 +1,6 @@
 {
-  "id": "eth_gps2m_s0",
-  "label": "ETH Zurich GPS-IMU flight + degraded GPS (2 m white, seed 0)",
+  "id": "eth_gps16m_nov_s0",
+  "label": "ETH Zurich GPS-IMU flight + degraded GPS (16 m white, seed 0)",
   "source_files": [
     "RawAccel ETH",
     "RawGyro ETH",
@@ -55,13 +55,14 @@
   },
   "derived_from": "eth",
   "gps_noise": {
-    "sigma_h_m": 2.0,
-    "sigma_u_m": 3.0,
+    "sigma_h_m": 16.0,
+    "sigma_u_m": 24.0,
     "sigma_vel_ms": 0.0,
+    "velocity_dropped": true,
     "gm_sigma_m": 0.0,
     "gm_tau_s": 60.0,
     "seed": 0,
     "raw_gps_rmse_h_clean_m": 3.6040150045985313,
-    "raw_gps_rmse_h_noisy_m": 4.227287249219567
+    "raw_gps_rmse_h_noisy_m": 18.828299776015747
   }
 }

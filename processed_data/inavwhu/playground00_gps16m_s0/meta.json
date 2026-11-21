@@ -1,6 +1,6 @@
 {
-  "id": "inavwhu/playground00_gps64m_s0",
-  "label": "iNav-WHU playground00 (ADIS16465 IMU 200 Hz, F9P GNSS 1 Hz) + degraded GPS (64 m white, seed 0)",
+  "id": "inavwhu/playground00_gps16m_s0",
+  "label": "iNav-WHU playground00 (ADIS16465 IMU 200 Hz, F9P GNSS 1 Hz) + degraded GPS (16 m white, seed 0)",
   "source_files": [
     "playground00_ADIS16465_IMU.txt",
     "playground00_F9P_GNSS.pos",
@@ -55,14 +55,15 @@
   },
   "derived_from": "inavwhu/playground00",
   "gps_noise": {
-    "sigma_h_m": 64.0,
-    "sigma_u_m": 96.0,
+    "sigma_h_m": 16.0,
+    "sigma_u_m": 24.0,
     "sigma_vel_ms": 0.0,
+    "velocity_dropped": false,
     "gm_sigma_m": 0.0,
     "gm_tau_s": 60.0,
     "seed": 0,
     "raw_gps_rmse_h_clean_m": 1.116553487300943,
-    "raw_gps_rmse_h_noisy_m": 73.73498091217478,
+    "raw_gps_rmse_h_noisy_m": 18.479401012585964,
     "note": "std_e/std_n/std_u are still the receiver's original sigmas"
   }
 }
