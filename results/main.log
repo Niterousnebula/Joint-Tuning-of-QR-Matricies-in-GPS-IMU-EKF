@@ -1,843 +1,785 @@
 
-######## main.py 2026-11-20T00:12:07 | eth_gps2m_s0, inavwhu/playground00_gps64m_s0, inavwhu/street00_gps64m_s0 | GA, PSO, DE, GWO | GPU NVIDIA GeForce RTX 4060 Laptop GPU ########
+######## main.py 2026-11-20T23:52:16 | eth_gps16m_nov_s0, inavwhu/playground00_gps16m_s0, inavwhu/street00_gps16m_s0 | GA, PSO, DE, GWO | GPU NVIDIA GeForce RTX 4060 Laptop GPU ########
 
-==================== eth_gps2m_s0: 27,047 predictions + 13,529 GPS updates per candidate ====================
+==================== eth_gps16m_nov_s0: 27,047 predictions + 13,529 GPS updates per candidate ====================
   validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
-  validation: max |GPU - CPU| 4.73e-09 m -> PASSED (tolerance 1e-06 m)
-  baseline: THETA0 RMSE_h 3.8334 m, raw GPS 4.2273 m, mean NIS 1.72
+  validation: max |GPU - CPU| 4.21e-11 m -> PASSED (tolerance 1e-06 m)
+  baseline: THETA0 RMSE_h 10.8184 m, raw GPS 18.8283 m, mean NIS 2.99
 
   ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
   seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: eth_gps2m_s0; results -> results\eth_gps2m_s0\GA
+Dataset: eth_gps16m_nov_s0; results -> results\eth_gps16m_nov_s0\GA
 Computing baseline references...
-Baseline EKF (THETA0): 3.8334 m
-Raw GPS:               4.2273 m
+Baseline EKF (THETA0): 10.8184 m
+Raw GPS:               18.8283 m
 
 === GA | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7476 m
-Change vs baseline EKF:   -0.0859 m
-Change vs raw GPS:        -0.4797 m
+Best whole-flight RMSE_h: 10.1423 m
+Change vs baseline EKF:   -0.6761 m
+Change vs raw GPS:        -8.6860 m
 Evaluations:              1000/1000
-Time:                     106.71 s (objective 106.67 s, 10 generations)
+Time:                     103.94 s (objective 103.91 s, 10 generations)
 Best parameter vector (log10):
-  log_q_acc     3.200000
-  log_q_gyro   -6.000000
-  log_q_ba     -5.878131
-  log_q_bg     -11.000000
-  log_r_xy      2.027877
-  log_r_z       0.885544
-  log_r_vel     1.284171
-
-=== GA | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7558 m
-Change vs baseline EKF:   -0.0776 m
-Change vs raw GPS:        -0.4715 m
-Evaluations:              1000/1000
-Time:                     106.23 s (objective 106.19 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc     3.200000
-  log_q_gyro   -2.856056
-  log_q_ba     -6.990369
-  log_q_bg     -7.767416
-  log_r_xy      1.810252
-  log_r_z       0.018153
-  log_r_vel    -1.495496
-
-=== GA | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7591 m
-Change vs baseline EKF:   -0.0744 m
-Change vs raw GPS:        -0.4682 m
-Evaluations:              1000/1000
-Time:                     105.12 s (objective 105.09 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc     2.907339
-  log_q_gyro   -2.347588
-  log_q_ba     -4.480423
-  log_q_bg     -6.825344
-  log_r_xy      1.535195
-  log_r_z       0.382853
-  log_r_vel    -0.359615
-
-=== GA | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7485 m
-Change vs baseline EKF:   -0.0850 m
-Change vs raw GPS:        -0.4788 m
-Evaluations:              1000/1000
-Time:                     105.21 s (objective 105.17 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc     3.180854
-  log_q_gyro   -5.609800
-  log_q_ba     -7.188653
-  log_q_bg     -9.842648
-  log_r_xy      1.441269
-  log_r_z      -0.391230
-  log_r_vel    -0.251370
-
-=== GA | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7445 m
-Change vs baseline EKF:   -0.0890 m
-Change vs raw GPS:        -0.4828 m
-Evaluations:              1000/1000
-Time:                     107.74 s (objective 107.70 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc     2.437549
-  log_q_gyro   -6.000000
-  log_q_ba     -4.646973
-  log_q_bg     -10.724040
-  log_r_xy      1.293564
-  log_r_z       1.752120
-  log_r_vel    -1.463798
-
-Saved GA run files to: D:\EKF\results\eth_gps2m_s0\GA
-  mean NIS of 49 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GA done: best seed 5 RMSE_h 3.7445 m; search 9.5 min, incumbents 0.1 min
-
-  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset eth_gps2m_s0: raw GPS RMSE_h 4.227 m, baseline EKF RMSE_h 3.833 m
-
-=== PSO | seed=1 | budget=1000 | backend=gpu ===
-seed 1  iter   0  k   100  best RMSE_h 3.7563 m  elapsed      11 s
-seed 1  iter   1  k   200  best RMSE_h 3.7563 m  elapsed      21 s
-seed 1  iter   2  k   300  best RMSE_h 3.7563 m  elapsed      32 s
-seed 1  iter   3  k   400  best RMSE_h 3.7412 m  elapsed      42 s
-seed 1  iter   4  k   500  best RMSE_h 3.6978 m  elapsed      53 s
-seed 1  iter   5  k   600  best RMSE_h 3.6978 m  elapsed      63 s
-seed 1  iter   6  k   700  best RMSE_h 3.6978 m  elapsed      74 s
-seed 1  iter   7  k   800  best RMSE_h 3.6928 m  elapsed      84 s
-seed 1  iter   8  k   900  best RMSE_h 3.6928 m  elapsed      95 s
-seed 1  iter   9  k  1000  best RMSE_h 3.6892 m  elapsed     105 s
-seed 1: RMSE_h 3.689 m (vs baseline -0.144 m, vs GPS -0.538 m), mean NIS 1.47, converged at k = 997, N_eval 1000, T_total 105 s (objective 105 s)
-
-=== PSO | seed=2 | budget=1000 | backend=gpu ===
-seed 2  iter   0  k   100  best RMSE_h 3.7888 m  elapsed      11 s
-seed 2  iter   1  k   200  best RMSE_h 3.7888 m  elapsed      21 s
-seed 2  iter   2  k   300  best RMSE_h 3.7860 m  elapsed      32 s
-seed 2  iter   3  k   400  best RMSE_h 3.7860 m  elapsed      42 s
-seed 2  iter   4  k   500  best RMSE_h 3.7838 m  elapsed      53 s
-seed 2  iter   5  k   600  best RMSE_h 3.7838 m  elapsed      63 s
-seed 2  iter   6  k   700  best RMSE_h 3.7812 m  elapsed      74 s
-seed 2  iter   7  k   800  best RMSE_h 3.7812 m  elapsed      84 s
-seed 2  iter   8  k   900  best RMSE_h 3.7811 m  elapsed      95 s
-seed 2  iter   9  k  1000  best RMSE_h 3.7651 m  elapsed     105 s
-seed 2: RMSE_h 3.765 m (vs baseline -0.068 m, vs GPS -0.462 m), mean NIS 9.45, converged at k = 922, N_eval 1000, T_total 105 s (objective 105 s)
-
-=== PSO | seed=3 | budget=1000 | backend=gpu ===
-seed 3  iter   0  k   100  best RMSE_h 3.7887 m  elapsed      11 s
-seed 3  iter   1  k   200  best RMSE_h 3.7637 m  elapsed      21 s
-seed 3  iter   2  k   300  best RMSE_h 3.7637 m  elapsed      32 s
-seed 3  iter   3  k   400  best RMSE_h 3.7637 m  elapsed      42 s
-seed 3  iter   4  k   500  best RMSE_h 3.7637 m  elapsed      53 s
-seed 3  iter   5  k   600  best RMSE_h 3.7514 m  elapsed      63 s
-seed 3  iter   6  k   700  best RMSE_h 3.7514 m  elapsed      74 s
-seed 3  iter   7  k   800  best RMSE_h 3.7380 m  elapsed      84 s
-seed 3  iter   8  k   900  best RMSE_h 3.7359 m  elapsed      95 s
-seed 3  iter   9  k  1000  best RMSE_h 3.7312 m  elapsed     105 s
-seed 3: RMSE_h 3.731 m (vs baseline -0.102 m, vs GPS -0.496 m), mean NIS 10.43, converged at k = 959, N_eval 1000, T_total 105 s (objective 105 s)
-
-=== PSO | seed=4 | budget=1000 | backend=gpu ===
-seed 4  iter   0  k   100  best RMSE_h 3.7780 m  elapsed      11 s
-seed 4  iter   1  k   200  best RMSE_h 3.7703 m  elapsed      21 s
-seed 4  iter   2  k   300  best RMSE_h 3.7700 m  elapsed      32 s
-seed 4  iter   3  k   400  best RMSE_h 3.7666 m  elapsed      42 s
-seed 4  iter   4  k   500  best RMSE_h 3.7622 m  elapsed      53 s
-seed 4  iter   5  k   600  best RMSE_h 3.7595 m  elapsed      63 s
-seed 4  iter   6  k   700  best RMSE_h 3.7595 m  elapsed      74 s
-seed 4  iter   7  k   800  best RMSE_h 3.7595 m  elapsed      84 s
-seed 4  iter   8  k   900  best RMSE_h 3.7423 m  elapsed      95 s
-seed 4  iter   9  k  1000  best RMSE_h 3.7309 m  elapsed     105 s
-seed 4: RMSE_h 3.731 m (vs baseline -0.103 m, vs GPS -0.496 m), mean NIS 2.99, converged at k = 952, N_eval 1000, T_total 105 s (objective 105 s)
-
-=== PSO | seed=5 | budget=1000 | backend=gpu ===
-seed 5  iter   0  k   100  best RMSE_h 3.7647 m  elapsed      11 s
-seed 5  iter   1  k   200  best RMSE_h 3.7647 m  elapsed      21 s
-seed 5  iter   2  k   300  best RMSE_h 3.7594 m  elapsed      32 s
-seed 5  iter   3  k   400  best RMSE_h 3.7594 m  elapsed      42 s
-seed 5  iter   4  k   500  best RMSE_h 3.7533 m  elapsed      53 s
-seed 5  iter   5  k   600  best RMSE_h 3.7533 m  elapsed      63 s
-seed 5  iter   6  k   700  best RMSE_h 3.7507 m  elapsed      74 s
-seed 5  iter   7  k   800  best RMSE_h 3.7450 m  elapsed      84 s
-seed 5  iter   8  k   900  best RMSE_h 3.7410 m  elapsed      95 s
-seed 5  iter   9  k  1000  best RMSE_h 3.7396 m  elapsed     105 s
-seed 5: RMSE_h 3.740 m (vs baseline -0.094 m, vs GPS -0.488 m), mean NIS 0.78, converged at k = 865, N_eval 1000, T_total 105 s (objective 105 s)
-  mean NIS of 62 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  PSO done: best seed 1 RMSE_h 3.6892 m; search 9.3 min, incumbents 0.1 min
-
-  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: eth_gps2m_s0; results -> results\eth_gps2m_s0\DE
-Computing baseline references...
-Baseline EKF (THETA0): 3.8334 m
-Raw GPS:               4.2273 m
-
-=== DE | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7563 m
-Change vs baseline EKF:   -0.0771 m
-Change vs raw GPS:        -0.4710 m
-Evaluations:              1000/1000
-Time:                     104.48 s (objective 104.44 s, 10 generations)
-
-=== DE | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7654 m
-Change vs baseline EKF:   -0.0680 m
-Change vs raw GPS:        -0.4619 m
-Evaluations:              1000/1000
-Time:                     104.59 s (objective 104.56 s, 10 generations)
-
-=== DE | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7562 m
-Change vs baseline EKF:   -0.0773 m
-Change vs raw GPS:        -0.4711 m
-Evaluations:              1000/1000
-Time:                     104.60 s (objective 104.56 s, 10 generations)
-
-=== DE | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7604 m
-Change vs baseline EKF:   -0.0731 m
-Change vs raw GPS:        -0.4669 m
-Evaluations:              1000/1000
-Time:                     104.47 s (objective 104.44 s, 10 generations)
-
-=== DE | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7504 m
-Change vs baseline EKF:   -0.0830 m
-Change vs raw GPS:        -0.4769 m
-Evaluations:              1000/1000
-Time:                     104.50 s (objective 104.46 s, 10 generations)
-
-Saved DE run files to: D:\EKF\results\eth_gps2m_s0\DE
-  mean NIS of 36 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  DE done: best seed 5 RMSE_h 3.7504 m; search 9.2 min, incumbents 0.1 min
-
-  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: eth_gps2m_s0; results -> results\eth_gps2m_s0\GWO
-Computing baseline references...
-Baseline EKF (THETA0): 3.8334 m
-Raw GPS:               4.2273 m
-
-=== GWO | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7563 m
-Change vs baseline EKF:   -0.0771 m
-Change vs raw GPS:        -0.4710 m
-Evaluations:              1000/1000
-Time:                     104.46 s (objective 104.43 s, 10 generations)
-
-=== GWO | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7804 m
-Change vs baseline EKF:   -0.0531 m
-Change vs raw GPS:        -0.4469 m
-Evaluations:              1000/1000
-Time:                     107.02 s (objective 106.98 s, 10 generations)
-
-=== GWO | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7865 m
-Change vs baseline EKF:   -0.0469 m
-Change vs raw GPS:        -0.4408 m
-Evaluations:              1000/1000
-Time:                     108.94 s (objective 108.88 s, 10 generations)
-
-=== GWO | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7510 m
-Change vs baseline EKF:   -0.0824 m
-Change vs raw GPS:        -0.4763 m
-Evaluations:              1000/1000
-Time:                     108.89 s (objective 108.84 s, 10 generations)
-
-=== GWO | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 3.7443 m
-Change vs baseline EKF:   -0.0892 m
-Change vs raw GPS:        -0.4830 m
-Evaluations:              1000/1000
-Time:                     109.19 s (objective 109.12 s, 10 generations)
-
-Saved GWO run files to: D:\EKF\results\eth_gps2m_s0\GWO
-  mean NIS of 69 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GWO done: best seed 5 RMSE_h 3.7443 m; search 9.6 min, incumbents 0.2 min
-wrote results\eth_gps2m_s0\results_table.md
-wrote results\eth_gps2m_s0\convergence.png
-  eth_gps2m_s0 finished in 0.66 h
-
-==================== inavwhu/playground00_gps64m_s0: 265,329 predictions + 1,325 GPS updates per candidate ====================
-  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
-  validation: max |GPU - CPU| 6.58e-10 m -> PASSED (tolerance 1e-06 m)
-  baseline: THETA0 RMSE_h 36.0944 m, raw GPS 73.7350 m, mean NIS 2.96
-
-  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/playground00_gps64m_s0; results -> results\inavwhu\playground00_gps64m_s0\GA
-Computing baseline references...
-Baseline EKF (THETA0): 36.0944 m
-Raw GPS:               73.7350 m
-
-=== GA | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4163 m
-Change vs baseline EKF:   -9.6782 m
-Change vs raw GPS:        -47.3187 m
-Evaluations:              1000/1000
-Time:                     769.28 s (objective 769.22 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -5.669904
-  log_q_gyro   -6.949253
-  log_q_ba     -5.881216
-  log_q_bg     -8.165797
-  log_r_xy      5.566456
-  log_r_z       3.978220
-  log_r_vel     0.677397
-
-=== GA | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4434 m
-Change vs baseline EKF:   -9.6510 m
-Change vs raw GPS:        -47.2916 m
-Evaluations:              1000/1000
-Time:                     787.26 s (objective 787.21 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -8.398057
-  log_q_gyro   -11.320327
-  log_q_ba     -5.766041
-  log_q_bg     -8.151213
-  log_r_xy      5.596233
-  log_r_z       3.938272
-  log_r_vel     0.908902
-
-=== GA | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4969 m
-Change vs baseline EKF:   -9.5975 m
-Change vs raw GPS:        -47.2381 m
-Evaluations:              1000/1000
-Time:                     778.43 s (objective 778.38 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -5.142043
-  log_q_gyro   -9.258223
-  log_q_ba     -6.403137
-  log_q_bg     -8.599405
-  log_r_xy      5.169217
-  log_r_z       4.122813
-  log_r_vel    -0.279914
-
-=== GA | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4881 m
-Change vs baseline EKF:   -9.6064 m
-Change vs raw GPS:        -47.2469 m
-Evaluations:              1000/1000
-Time:                     794.31 s (objective 794.25 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -3.301638
-  log_q_gyro   -9.822948
-  log_q_ba     -6.283529
-  log_q_bg     -8.356528
-  log_r_xy      5.356167
-  log_r_z       4.102042
-  log_r_vel    -0.190844
-
-=== GA | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.7646 m
-Change vs baseline EKF:   -9.3298 m
-Change vs raw GPS:        -46.9703 m
-Evaluations:              1000/1000
-Time:                     778.45 s (objective 778.39 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -4.973380
-  log_q_gyro   -10.473170
-  log_q_ba     -6.200921
-  log_q_bg     -8.718857
-  log_r_xy      5.002384
-  log_r_z       5.072124
-  log_r_vel     1.378298
-
-Saved GA run files to: D:\EKF\results\inavwhu\playground00_gps64m_s0\GA
-  mean NIS of 66 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GA done: best seed 1 RMSE_h 26.4163 m; search 69.7 min, incumbents 1.2 min
-
-  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset inavwhu/playground00_gps64m_s0: raw GPS RMSE_h 73.735 m, baseline EKF RMSE_h 36.094 m
-
-=== PSO | seed=1 | budget=1000 | backend=gpu ===
-seed 1  iter   0  k   100  best RMSE_h 27.9456 m  elapsed      80 s
-seed 1  iter   1  k   200  best RMSE_h 27.2931 m  elapsed     159 s
-seed 1  iter   2  k   300  best RMSE_h 26.9858 m  elapsed     239 s
-seed 1  iter   3  k   400  best RMSE_h 26.8341 m  elapsed     321 s
-seed 1  iter   4  k   500  best RMSE_h 26.6570 m  elapsed     401 s
-seed 1  iter   5  k   600  best RMSE_h 26.4763 m  elapsed     480 s
-seed 1  iter   6  k   700  best RMSE_h 26.4763 m  elapsed     561 s
-seed 1  iter   7  k   800  best RMSE_h 26.4763 m  elapsed     642 s
-seed 1  iter   8  k   900  best RMSE_h 26.4503 m  elapsed     721 s
-seed 1  iter   9  k  1000  best RMSE_h 26.4503 m  elapsed     799 s
-seed 1: RMSE_h 26.450 m (vs baseline -9.644 m, vs GPS -47.285 m), mean NIS 1.11, converged at k = 466, N_eval 1000, T_total 799 s (objective 799 s)
-
-=== PSO | seed=2 | budget=1000 | backend=gpu ===
-seed 2  iter   0  k   100  best RMSE_h 28.0959 m  elapsed      81 s
-seed 2  iter   1  k   200  best RMSE_h 26.9063 m  elapsed     160 s
-seed 2  iter   2  k   300  best RMSE_h 26.9063 m  elapsed     239 s
-seed 2  iter   3  k   400  best RMSE_h 26.7982 m  elapsed     320 s
-seed 2  iter   4  k   500  best RMSE_h 26.7982 m  elapsed     399 s
-seed 2  iter   5  k   600  best RMSE_h 26.7982 m  elapsed     476 s
-seed 2  iter   6  k   700  best RMSE_h 26.7925 m  elapsed     553 s
-seed 2  iter   7  k   800  best RMSE_h 26.7925 m  elapsed     630 s
-seed 2  iter   8  k   900  best RMSE_h 26.7187 m  elapsed     708 s
-seed 2  iter   9  k  1000  best RMSE_h 26.6386 m  elapsed     788 s
-seed 2: RMSE_h 26.639 m (vs baseline -9.456 m, vs GPS -47.096 m), mean NIS 0.57, converged at k = 926, N_eval 1000, T_total 788 s (objective 788 s)
-
-=== PSO | seed=3 | budget=1000 | backend=gpu ===
-seed 3  iter   0  k   100  best RMSE_h 28.6020 m  elapsed      79 s
-seed 3  iter   1  k   200  best RMSE_h 28.0780 m  elapsed     157 s
-seed 3  iter   2  k   300  best RMSE_h 27.0020 m  elapsed     238 s
-seed 3  iter   3  k   400  best RMSE_h 26.8330 m  elapsed     316 s
-seed 3  iter   4  k   500  best RMSE_h 26.6027 m  elapsed     394 s
-seed 3  iter   5  k   600  best RMSE_h 26.4271 m  elapsed     472 s
-seed 3  iter   6  k   700  best RMSE_h 26.4271 m  elapsed     551 s
-seed 3  iter   7  k   800  best RMSE_h 26.4271 m  elapsed     631 s
-seed 3  iter   8  k   900  best RMSE_h 26.4271 m  elapsed     710 s
-seed 3  iter   9  k  1000  best RMSE_h 26.3961 m  elapsed     789 s
-seed 3: RMSE_h 26.396 m (vs baseline -9.698 m, vs GPS -47.339 m), mean NIS 0.77, converged at k = 447, N_eval 1000, T_total 789 s (objective 789 s)
-
-=== PSO | seed=4 | budget=1000 | backend=gpu ===
-seed 4  iter   0  k   100  best RMSE_h 28.2125 m  elapsed      74 s
-seed 4  iter   1  k   200  best RMSE_h 26.8112 m  elapsed     147 s
-seed 4  iter   2  k   300  best RMSE_h 26.6543 m  elapsed     220 s
-seed 4  iter   3  k   400  best RMSE_h 26.5544 m  elapsed     294 s
-seed 4  iter   4  k   500  best RMSE_h 26.5544 m  elapsed     367 s
-seed 4  iter   5  k   600  best RMSE_h 26.5281 m  elapsed     440 s
-seed 4  iter   6  k   700  best RMSE_h 26.4981 m  elapsed     513 s
-seed 4  iter   7  k   800  best RMSE_h 26.4981 m  elapsed     586 s
-seed 4  iter   8  k   900  best RMSE_h 26.4711 m  elapsed     660 s
-seed 4  iter   9  k  1000  best RMSE_h 26.3952 m  elapsed     733 s
-seed 4: RMSE_h 26.395 m (vs baseline -9.699 m, vs GPS -47.340 m), mean NIS 0.99, converged at k = 807, N_eval 1000, T_total 733 s (objective 733 s)
-
-=== PSO | seed=5 | budget=1000 | backend=gpu ===
-seed 5  iter   0  k   100  best RMSE_h 29.2731 m  elapsed      73 s
-seed 5  iter   1  k   200  best RMSE_h 28.1898 m  elapsed     147 s
-seed 5  iter   2  k   300  best RMSE_h 26.6336 m  elapsed     220 s
-seed 5  iter   3  k   400  best RMSE_h 26.6128 m  elapsed     293 s
-seed 5  iter   4  k   500  best RMSE_h 26.6116 m  elapsed     366 s
-seed 5  iter   5  k   600  best RMSE_h 26.4133 m  elapsed     439 s
-seed 5  iter   6  k   700  best RMSE_h 26.3966 m  elapsed     512 s
-seed 5  iter   7  k   800  best RMSE_h 26.3966 m  elapsed     586 s
-seed 5  iter   8  k   900  best RMSE_h 26.3966 m  elapsed     659 s
-seed 5  iter   9  k  1000  best RMSE_h 26.3966 m  elapsed     749 s
-seed 5: RMSE_h 26.397 m (vs baseline -9.698 m, vs GPS -47.338 m), mean NIS 0.84, converged at k = 253, N_eval 1000, T_total 749 s (objective 749 s)
-  mean NIS of 81 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  PSO done: best seed 4 RMSE_h 26.3952 m; search 68.3 min, incumbents 1.1 min
-
-  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/playground00_gps64m_s0; results -> results\inavwhu\playground00_gps64m_s0\DE
-Computing baseline references...
-Baseline EKF (THETA0): 36.0944 m
-Raw GPS:               73.7350 m
-
-=== DE | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.8863 m
-Change vs baseline EKF:   -9.2082 m
-Change vs raw GPS:        -46.8487 m
-Evaluations:              1000/1000
-Time:                     731.13 s (objective 731.09 s, 10 generations)
-
-=== DE | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.6600 m
-Change vs baseline EKF:   -9.4344 m
-Change vs raw GPS:        -47.0749 m
-Evaluations:              1000/1000
-Time:                     731.44 s (objective 731.41 s, 10 generations)
-
-=== DE | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.6431 m
-Change vs baseline EKF:   -9.4513 m
-Change vs raw GPS:        -47.0919 m
-Evaluations:              1000/1000
-Time:                     730.84 s (objective 730.81 s, 10 generations)
-
-=== DE | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.8257 m
-Change vs baseline EKF:   -9.2688 m
-Change vs raw GPS:        -46.9093 m
-Evaluations:              1000/1000
-Time:                     731.04 s (objective 731.01 s, 10 generations)
-
-=== DE | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.6009 m
-Change vs baseline EKF:   -9.4935 m
-Change vs raw GPS:        -47.1340 m
-Evaluations:              1000/1000
-Time:                     731.36 s (objective 731.33 s, 10 generations)
-
-Saved DE run files to: D:\EKF\results\inavwhu\playground00_gps64m_s0\DE
-  mean NIS of 55 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  DE done: best seed 5 RMSE_h 26.6009 m; search 63.5 min, incumbents 1.0 min
-
-  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/playground00_gps64m_s0; results -> results\inavwhu\playground00_gps64m_s0\GWO
-Computing baseline references...
-Baseline EKF (THETA0): 36.0944 m
-Raw GPS:               73.7350 m
-
-=== GWO | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4652 m
-Change vs baseline EKF:   -9.6292 m
-Change vs raw GPS:        -47.2698 m
-Evaluations:              1000/1000
-Time:                     730.97 s (objective 730.93 s, 10 generations)
-
-=== GWO | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4930 m
-Change vs baseline EKF:   -9.6014 m
-Change vs raw GPS:        -47.2420 m
-Evaluations:              1000/1000
-Time:                     730.99 s (objective 730.96 s, 10 generations)
-
-=== GWO | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4258 m
-Change vs baseline EKF:   -9.6687 m
-Change vs raw GPS:        -47.3092 m
-Evaluations:              1000/1000
-Time:                     730.84 s (objective 730.80 s, 10 generations)
-
-=== GWO | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.4628 m
-Change vs baseline EKF:   -9.6316 m
-Change vs raw GPS:        -47.2722 m
-Evaluations:              1000/1000
-Time:                     731.34 s (objective 731.30 s, 10 generations)
-
-=== GWO | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 26.3887 m
-Change vs baseline EKF:   -9.7058 m
-Change vs raw GPS:        -47.3463 m
-Evaluations:              1000/1000
-Time:                     731.29 s (objective 731.25 s, 10 generations)
-
-Saved GWO run files to: D:\EKF\results\inavwhu\playground00_gps64m_s0\GWO
-  mean NIS of 74 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GWO done: best seed 5 RMSE_h 26.3887 m; search 63.5 min, incumbents 1.1 min
-wrote results\inavwhu\playground00_gps64m_s0\results_table.md
-wrote results\inavwhu\playground00_gps64m_s0\convergence.png
-  inavwhu/playground00_gps64m_s0 finished in 4.61 h
-
-==================== inavwhu/street00_gps64m_s0: 280,292 predictions + 1,400 GPS updates per candidate ====================
-  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
-  validation: max |GPU - CPU| 4.53e+01 m -> FAILED (tolerance 1e-06 m)
-
-######## main.py 2026-11-20T13:37:25 | inavwhu/street00_gps64m_s0 | GA, PSO, DE, GWO | GPU NVIDIA GeForce RTX 4060 Laptop GPU ########
-
-==================== inavwhu/street00_gps64m_s0: 280,292 predictions + 1,400 GPS updates per candidate ====================
-  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
-
-######## main.py 2026-11-20T13:40:30 | eth_gps2m_s0, inavwhu/playground00_gps64m_s0, inavwhu/street00_gps64m_s0 | GA, PSO, DE, GWO | GPU NVIDIA GeForce RTX 4060 Laptop GPU ########
-
-==================== eth_gps2m_s0: 27,047 predictions + 13,529 GPS updates per candidate ====================
-  validation: already passed (max difference 4.73e-09 m)
-  baseline: already done (RMSE_h 3.8334 m, raw GPS 4.2273 m)
-
-  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  GA done: best seed 5 RMSE_h 3.7445 m; search 0.0 min, incumbents 0.0 min
-
-  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  PSO done: best seed 1 RMSE_h 3.6892 m; search 0.0 min, incumbents 0.0 min
-
-  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  DE done: best seed 5 RMSE_h 3.7504 m; search 0.0 min, incumbents 0.0 min
-
-  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  GWO done: best seed 5 RMSE_h 3.7443 m; search 0.0 min, incumbents 0.0 min
-wrote results\eth_gps2m_s0\results_table.md
-wrote results\eth_gps2m_s0\convergence.png
-  eth_gps2m_s0 finished in 0.00 h
-
-==================== inavwhu/playground00_gps64m_s0: 265,329 predictions + 1,325 GPS updates per candidate ====================
-  validation: already passed (max difference 6.58e-10 m)
-  baseline: already done (RMSE_h 36.0944 m, raw GPS 73.7350 m)
-
-  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  GA done: best seed 1 RMSE_h 26.4163 m; search 0.0 min, incumbents 0.0 min
-
-  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  PSO done: best seed 4 RMSE_h 26.3952 m; search 0.0 min, incumbents 0.0 min
-
-  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  DE done: best seed 5 RMSE_h 26.6009 m; search 0.0 min, incumbents 0.0 min
-
-  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 done, 2 done, 3 done, 4 done, 5 done
-  GWO done: best seed 5 RMSE_h 26.3887 m; search 0.0 min, incumbents 0.0 min
-wrote results\inavwhu\playground00_gps64m_s0\results_table.md
-wrote results\inavwhu\playground00_gps64m_s0\convergence.png
-  inavwhu/playground00_gps64m_s0 finished in 0.00 h
-
-==================== inavwhu/street00_gps64m_s0: 280,292 predictions + 1,400 GPS updates per candidate ====================
-  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
-  validation: 1 numerically chaotic candidate(s) (mean NIS > 1000) left out of the tolerance check; their |GPU - CPU| is up to 45.3 m, as rounding decides them on any backend
-  validation: max |GPU - CPU| 8.85e-09 m -> PASSED (tolerance 1e-06 m)
-  baseline: THETA0 RMSE_h 35.3939 m, raw GPS 73.8959 m, mean NIS 2.96
-
-  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
-  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/street00_gps64m_s0; results -> results\inavwhu\street00_gps64m_s0\GA
-Computing baseline references...
-Baseline EKF (THETA0): 35.3939 m
-Raw GPS:               73.8959 m
-
-=== GA | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.6189 m
-Change vs baseline EKF:   -5.7750 m
-Change vs raw GPS:        -44.2770 m
-Evaluations:              1000/1000
-Time:                     772.23 s (objective 772.19 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -4.807636
-  log_q_gyro   -5.842930
-  log_q_ba     -5.651979
-  log_q_bg     -9.363273
-  log_r_xy      4.758014
-  log_r_z       3.507736
-  log_r_vel     0.957077
-
-=== GA | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.5437 m
-Change vs baseline EKF:   -5.8502 m
-Change vs raw GPS:        -44.3522 m
-Evaluations:              1000/1000
-Time:                     772.52 s (objective 772.49 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -4.464344
-  log_q_gyro   -5.842930
-  log_q_ba     -5.914496
-  log_q_bg     -9.539724
-  log_r_xy      4.832063
-  log_r_z       3.515437
-  log_r_vel     0.696076
-
-=== GA | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.6589 m
-Change vs baseline EKF:   -5.7350 m
-Change vs raw GPS:        -44.2370 m
-Evaluations:              1000/1000
-Time:                     772.80 s (objective 772.78 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -4.089444
-  log_q_gyro   -5.842930
-  log_q_ba     -5.589153
-  log_q_bg     -8.926123
-  log_r_xy      4.880230
-  log_r_z       3.602540
-  log_r_vel    -0.328776
-
-=== GA | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.5917 m
-Change vs baseline EKF:   -5.8022 m
-Change vs raw GPS:        -44.3042 m
-Evaluations:              1000/1000
-Time:                     773.85 s (objective 773.81 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -5.583854
-  log_q_gyro   -5.842930
-  log_q_ba     -5.193267
-  log_q_bg     -9.247007
-  log_r_xy      4.805538
-  log_r_z       3.539574
-  log_r_vel     0.897861
-
-=== GA | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.1573 m
-Change vs baseline EKF:   -5.2366 m
-Change vs raw GPS:        -43.7386 m
-Evaluations:              1000/1000
-Time:                     772.46 s (objective 772.43 s, 10 generations)
-Best parameter vector (log10):
-  log_q_acc    -3.113356
-  log_q_gyro   -9.628194
-  log_q_ba     -5.573828
-  log_q_bg     -8.485436
-  log_r_xy      4.828077
-  log_r_z       3.535785
+  log_q_acc    -0.115111
+  log_q_gyro   -2.803175
+  log_q_ba     -2.000000
+  log_q_bg     -7.499790
+  log_r_xy      2.194543
+  log_r_z       3.641452
   log_r_vel     2.000000
 
-Saved GA run files to: D:\EKF\results\inavwhu\street00_gps64m_s0\GA
-  mean NIS of 69 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GA done: best seed 2 RMSE_h 29.5437 m; search 67.2 min, incumbents 1.1 min
+=== GA | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 10.1320 m
+Change vs baseline EKF:   -0.6864 m
+Change vs raw GPS:        -8.6963 m
+Evaluations:              1000/1000
+Time:                     103.71 s (objective 103.68 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc     1.179524
+  log_q_gyro   -2.531410
+  log_q_ba     -2.000000
+  log_q_bg     -11.000000
+  log_r_xy      2.775775
+  log_r_z       0.783634
+  log_r_vel    -0.883903
+
+=== GA | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 10.0527 m
+Change vs baseline EKF:   -0.7657 m
+Change vs raw GPS:        -8.7756 m
+Evaluations:              1000/1000
+Time:                     104.48 s (objective 104.45 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -2.800000
+  log_q_gyro   -3.228875
+  log_q_ba     -2.349808
+  log_q_bg     -7.084215
+  log_r_xy      1.759460
+  log_r_z       1.864460
+  log_r_vel    -0.160649
+
+=== GA | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 10.0905 m
+Change vs baseline EKF:   -0.7279 m
+Change vs raw GPS:        -8.7377 m
+Evaluations:              1000/1000
+Time:                     103.63 s (objective 103.60 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -0.201807
+  log_q_gyro   -3.001581
+  log_q_ba     -2.000000
+  log_q_bg     -7.334820
+  log_r_xy      2.050382
+  log_r_z       3.081968
+  log_r_vel     1.229363
+
+=== GA | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 10.1787 m
+Change vs baseline EKF:   -0.6397 m
+Change vs raw GPS:        -8.6496 m
+Evaluations:              1000/1000
+Time:                     103.30 s (objective 103.27 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -1.450742
+  log_q_gyro   -4.466704
+  log_q_ba     -7.493163
+  log_q_bg     -11.000000
+  log_r_xy      0.603111
+  log_r_z       2.060554
+  log_r_vel     1.633821
+
+Saved GA run files to: D:\EKF\results\eth_gps16m_nov_s0\GA
+  mean NIS of 48 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GA done: best seed 3 RMSE_h 10.0527 m; search 9.0 min, incumbents 0.1 min
 
   ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
   seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset inavwhu/street00_gps64m_s0: raw GPS RMSE_h 73.896 m, baseline EKF RMSE_h 35.394 m
+Dataset eth_gps16m_nov_s0: raw GPS RMSE_h 18.828 m, baseline EKF RMSE_h 10.818 m
 
 === PSO | seed=1 | budget=1000 | backend=gpu ===
-seed 1  iter   0  k   100  best RMSE_h 30.2241 m  elapsed      77 s
-seed 1  iter   1  k   200  best RMSE_h 30.2241 m  elapsed     155 s
-seed 1  iter   2  k   300  best RMSE_h 30.2241 m  elapsed     232 s
-seed 1  iter   3  k   400  best RMSE_h 29.7093 m  elapsed     309 s
-seed 1  iter   4  k   500  best RMSE_h 29.7093 m  elapsed     386 s
-seed 1  iter   5  k   600  best RMSE_h 29.6419 m  elapsed     463 s
-seed 1  iter   6  k   700  best RMSE_h 29.6291 m  elapsed     541 s
-seed 1  iter   7  k   800  best RMSE_h 29.5050 m  elapsed     618 s
-seed 1  iter   8  k   900  best RMSE_h 29.5050 m  elapsed     695 s
-seed 1  iter   9  k  1000  best RMSE_h 29.4892 m  elapsed     772 s
-seed 1: RMSE_h 29.489 m (vs baseline -5.905 m, vs GPS -44.407 m), mean NIS 2.77, converged at k = 323, N_eval 1000, T_total 772 s (objective 772 s)
+seed 1  iter   0  k   100  best RMSE_h 10.3094 m  elapsed      11 s
+seed 1  iter   1  k   200  best RMSE_h 10.2822 m  elapsed      21 s
+seed 1  iter   2  k   300  best RMSE_h 10.2018 m  elapsed      31 s
+seed 1  iter   3  k   400  best RMSE_h 10.1853 m  elapsed      41 s
+seed 1  iter   4  k   500  best RMSE_h 10.1590 m  elapsed      52 s
+seed 1  iter   5  k   600  best RMSE_h 10.1590 m  elapsed      62 s
+seed 1  iter   6  k   700  best RMSE_h 10.1589 m  elapsed      72 s
+seed 1  iter   7  k   800  best RMSE_h 10.1589 m  elapsed      83 s
+seed 1  iter   8  k   900  best RMSE_h 10.1292 m  elapsed      93 s
+seed 1  iter   9  k  1000  best RMSE_h 10.0711 m  elapsed     103 s
+seed 1: RMSE_h 10.071 m (vs baseline -0.747 m, vs GPS -8.757 m), mean NIS 12.93, converged at k = 908, N_eval 1000, T_total 103 s (objective 103 s)
 
 === PSO | seed=2 | budget=1000 | backend=gpu ===
-seed 2  iter   0  k   100  best RMSE_h 31.3107 m  elapsed      77 s
-seed 2  iter   1  k   200  best RMSE_h 31.0694 m  elapsed     155 s
-seed 2  iter   2  k   300  best RMSE_h 30.6979 m  elapsed     232 s
-seed 2  iter   3  k   400  best RMSE_h 30.2002 m  elapsed     309 s
-seed 2  iter   4  k   500  best RMSE_h 30.2002 m  elapsed     386 s
-seed 2  iter   5  k   600  best RMSE_h 30.2002 m  elapsed     463 s
-seed 2  iter   6  k   700  best RMSE_h 30.1184 m  elapsed     541 s
-seed 2  iter   7  k   800  best RMSE_h 30.1184 m  elapsed     618 s
-seed 2  iter   8  k   900  best RMSE_h 30.1124 m  elapsed     695 s
-seed 2  iter   9  k  1000  best RMSE_h 30.1034 m  elapsed     772 s
-seed 2: RMSE_h 30.103 m (vs baseline -5.291 m, vs GPS -43.793 m), mean NIS 2.92, converged at k = 609, N_eval 1000, T_total 772 s (objective 772 s)
+seed 2  iter   0  k   100  best RMSE_h 10.4187 m  elapsed      11 s
+seed 2  iter   1  k   200  best RMSE_h 10.3187 m  elapsed      21 s
+seed 2  iter   2  k   300  best RMSE_h 10.2824 m  elapsed      31 s
+seed 2  iter   3  k   400  best RMSE_h 10.2824 m  elapsed      42 s
+seed 2  iter   4  k   500  best RMSE_h 10.2824 m  elapsed      52 s
+seed 2  iter   5  k   600  best RMSE_h 10.2824 m  elapsed      62 s
+seed 2  iter   6  k   700  best RMSE_h 10.2538 m  elapsed      73 s
+seed 2  iter   7  k   800  best RMSE_h 10.2538 m  elapsed      83 s
+seed 2  iter   8  k   900  best RMSE_h 10.2538 m  elapsed      94 s
+seed 2  iter   9  k  1000  best RMSE_h 10.2017 m  elapsed     104 s
+seed 2: RMSE_h 10.202 m (vs baseline -0.617 m, vs GPS -8.627 m), mean NIS 0.64, converged at k = 114, N_eval 1000, T_total 104 s (objective 104 s)
 
 === PSO | seed=3 | budget=1000 | backend=gpu ===
-seed 3  iter   0  k   100  best RMSE_h 31.2762 m  elapsed      77 s
-seed 3  iter   1  k   200  best RMSE_h 30.4988 m  elapsed     155 s
-seed 3  iter   2  k   300  best RMSE_h 30.3336 m  elapsed     232 s
-seed 3  iter   3  k   400  best RMSE_h 30.0723 m  elapsed     309 s
-seed 3  iter   4  k   500  best RMSE_h 29.9935 m  elapsed     386 s
-seed 3  iter   5  k   600  best RMSE_h 29.7109 m  elapsed     464 s
-seed 3  iter   6  k   700  best RMSE_h 29.5780 m  elapsed     541 s
-seed 3  iter   7  k   800  best RMSE_h 29.5360 m  elapsed     618 s
-seed 3  iter   8  k   900  best RMSE_h 29.4623 m  elapsed     695 s
-seed 3  iter   9  k  1000  best RMSE_h 29.4623 m  elapsed     773 s
-seed 3: RMSE_h 29.462 m (vs baseline -5.932 m, vs GPS -44.434 m), mean NIS 2.83, converged at k = 74, N_eval 1000, T_total 773 s (objective 773 s)
+seed 3  iter   0  k   100  best RMSE_h 10.2783 m  elapsed      11 s
+seed 3  iter   1  k   200  best RMSE_h 10.2783 m  elapsed      21 s
+seed 3  iter   2  k   300  best RMSE_h 10.2396 m  elapsed      31 s
+seed 3  iter   3  k   400  best RMSE_h 10.2081 m  elapsed      42 s
+seed 3  iter   4  k   500  best RMSE_h 10.2081 m  elapsed      52 s
+seed 3  iter   5  k   600  best RMSE_h 10.1098 m  elapsed      62 s
+seed 3  iter   6  k   700  best RMSE_h 10.1098 m  elapsed      72 s
+seed 3  iter   7  k   800  best RMSE_h 10.1098 m  elapsed      83 s
+seed 3  iter   8  k   900  best RMSE_h 10.1098 m  elapsed      93 s
+seed 3  iter   9  k  1000  best RMSE_h 10.1076 m  elapsed     103 s
+seed 3: RMSE_h 10.108 m (vs baseline -0.711 m, vs GPS -8.721 m), mean NIS 4.06, converged at k = 587, N_eval 1000, T_total 103 s (objective 103 s)
 
 === PSO | seed=4 | budget=1000 | backend=gpu ===
-seed 4  iter   0  k   100  best RMSE_h 31.5642 m  elapsed      77 s
-seed 4  iter   1  k   200  best RMSE_h 30.8594 m  elapsed     155 s
-seed 4  iter   2  k   300  best RMSE_h 30.0377 m  elapsed     232 s
-seed 4  iter   3  k   400  best RMSE_h 30.0377 m  elapsed     309 s
-seed 4  iter   4  k   500  best RMSE_h 29.8001 m  elapsed     386 s
-seed 4  iter   5  k   600  best RMSE_h 29.6442 m  elapsed     464 s
-seed 4  iter   6  k   700  best RMSE_h 29.5689 m  elapsed     541 s
-seed 4  iter   7  k   800  best RMSE_h 29.5375 m  elapsed     618 s
-seed 4  iter   8  k   900  best RMSE_h 29.4728 m  elapsed     695 s
-seed 4  iter   9  k  1000  best RMSE_h 29.4694 m  elapsed     772 s
-seed 4: RMSE_h 29.469 m (vs baseline -5.924 m, vs GPS -44.426 m), mean NIS 2.67, converged at k = 742, N_eval 1000, T_total 772 s (objective 772 s)
+seed 4  iter   0  k   100  best RMSE_h 10.3162 m  elapsed      11 s
+seed 4  iter   1  k   200  best RMSE_h 10.3162 m  elapsed      21 s
+seed 4  iter   2  k   300  best RMSE_h 10.2527 m  elapsed      31 s
+seed 4  iter   3  k   400  best RMSE_h 10.2481 m  elapsed      42 s
+seed 4  iter   4  k   500  best RMSE_h 10.2481 m  elapsed      52 s
+seed 4  iter   5  k   600  best RMSE_h 10.2481 m  elapsed      62 s
+seed 4  iter   6  k   700  best RMSE_h 10.2481 m  elapsed      72 s
+seed 4  iter   7  k   800  best RMSE_h 10.2481 m  elapsed      83 s
+seed 4  iter   8  k   900  best RMSE_h 10.2230 m  elapsed      93 s
+seed 4  iter   9  k  1000  best RMSE_h 10.1592 m  elapsed     103 s
+seed 4: RMSE_h 10.159 m (vs baseline -0.659 m, vs GPS -8.669 m), mean NIS 9.86, converged at k = 912, N_eval 1000, T_total 103 s (objective 103 s)
 
 === PSO | seed=5 | budget=1000 | backend=gpu ===
-seed 5  iter   0  k   100  best RMSE_h 31.7012 m  elapsed      77 s
-seed 5  iter   1  k   200  best RMSE_h 30.6505 m  elapsed     155 s
-seed 5  iter   2  k   300  best RMSE_h 30.5298 m  elapsed     232 s
-seed 5  iter   3  k   400  best RMSE_h 30.1660 m  elapsed     309 s
-seed 5  iter   4  k   500  best RMSE_h 30.1143 m  elapsed     386 s
-seed 5  iter   5  k   600  best RMSE_h 30.1143 m  elapsed     463 s
-seed 5  iter   6  k   700  best RMSE_h 30.1143 m  elapsed     540 s
-seed 5  iter   7  k   800  best RMSE_h 30.1143 m  elapsed     618 s
-seed 5  iter   8  k   900  best RMSE_h 30.1137 m  elapsed     695 s
-seed 5  iter   9  k  1000  best RMSE_h 30.1065 m  elapsed     772 s
-seed 5: RMSE_h 30.107 m (vs baseline -5.287 m, vs GPS -43.789 m), mean NIS 2.91, converged at k = 28, N_eval 1000, T_total 772 s (objective 772 s)
-  mean NIS of 74 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  PSO done: best seed 3 RMSE_h 29.4623 m; search 67.1 min, incumbents 1.2 min
+seed 5  iter   0  k   100  best RMSE_h 10.4560 m  elapsed      11 s
+seed 5  iter   1  k   200  best RMSE_h 10.3074 m  elapsed      21 s
+seed 5  iter   2  k   300  best RMSE_h 10.2628 m  elapsed      31 s
+seed 5  iter   3  k   400  best RMSE_h 10.2628 m  elapsed      42 s
+seed 5  iter   4  k   500  best RMSE_h 10.2628 m  elapsed      52 s
+seed 5  iter   5  k   600  best RMSE_h 10.2628 m  elapsed      62 s
+seed 5  iter   6  k   700  best RMSE_h 10.2377 m  elapsed      72 s
+seed 5  iter   7  k   800  best RMSE_h 10.2377 m  elapsed      83 s
+seed 5  iter   8  k   900  best RMSE_h 10.2377 m  elapsed      93 s
+seed 5  iter   9  k  1000  best RMSE_h 10.2377 m  elapsed     103 s
+seed 5: RMSE_h 10.238 m (vs baseline -0.581 m, vs GPS -8.591 m), mean NIS 9.76, converged at k = 157, N_eval 1000, T_total 103 s (objective 103 s)
+  mean NIS of 56 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  PSO done: best seed 1 RMSE_h 10.0711 m; search 9.0 min, incumbents 0.1 min
 
   ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
   seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/street00_gps64m_s0; results -> results\inavwhu\street00_gps64m_s0\DE
+Dataset: eth_gps16m_nov_s0; results -> results\eth_gps16m_nov_s0\DE
 Computing baseline references...
-Baseline EKF (THETA0): 35.3939 m
-Raw GPS:               73.8959 m
+Baseline EKF (THETA0): 10.8184 m
+Raw GPS:               18.8283 m
 
 === DE | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.2241 m
-Change vs baseline EKF:   -5.1698 m
-Change vs raw GPS:        -43.6718 m
+Best whole-flight RMSE_h: 9.9516 m
+Change vs baseline EKF:   -0.8668 m
+Change vs raw GPS:        -8.8767 m
 Evaluations:              1000/1000
-Time:                     771.84 s (objective 771.81 s, 10 generations)
+Time:                     104.00 s (objective 103.97 s, 10 generations)
 
 === DE | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.2158 m
-Change vs baseline EKF:   -5.1781 m
-Change vs raw GPS:        -43.6801 m
+Best whole-flight RMSE_h: 10.1421 m
+Change vs baseline EKF:   -0.6763 m
+Change vs raw GPS:        -8.6862 m
 Evaluations:              1000/1000
-Time:                     771.45 s (objective 771.42 s, 10 generations)
+Time:                     103.60 s (objective 103.57 s, 10 generations)
 
 === DE | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.3294 m
-Change vs baseline EKF:   -5.0645 m
-Change vs raw GPS:        -43.5665 m
+Best whole-flight RMSE_h: 10.4482 m
+Change vs baseline EKF:   -0.3702 m
+Change vs raw GPS:        -8.3801 m
 Evaluations:              1000/1000
-Time:                     781.17 s (objective 781.13 s, 10 generations)
+Time:                     103.27 s (objective 103.24 s, 10 generations)
 
 === DE | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.9651 m
-Change vs baseline EKF:   -5.4288 m
-Change vs raw GPS:        -43.9308 m
+Best whole-flight RMSE_h: 9.9857 m
+Change vs baseline EKF:   -0.8327 m
+Change vs raw GPS:        -8.8426 m
 Evaluations:              1000/1000
-Time:                     815.84 s (objective 815.78 s, 10 generations)
+Time:                     103.22 s (objective 103.18 s, 10 generations)
 
 === DE | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.1564 m
-Change vs baseline EKF:   -5.2375 m
-Change vs raw GPS:        -43.7395 m
+Best whole-flight RMSE_h: 10.0444 m
+Change vs baseline EKF:   -0.7741 m
+Change vs raw GPS:        -8.7839 m
 Evaluations:              1000/1000
-Time:                     819.10 s (objective 819.06 s, 10 generations)
+Time:                     103.85 s (objective 103.82 s, 10 generations)
 
-Saved DE run files to: D:\EKF\results\inavwhu\street00_gps64m_s0\DE
-  mean NIS of 40 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  DE done: best seed 4 RMSE_h 29.9651 m; search 69.3 min, incumbents 1.0 min
+Saved DE run files to: D:\EKF\results\eth_gps16m_nov_s0\DE
+  mean NIS of 44 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  DE done: best seed 1 RMSE_h 9.9516 m; search 9.0 min, incumbents 0.1 min
 
   ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
   seeds: 1 run, 2 run, 3 run, 4 run, 5 run
-Dataset: inavwhu/street00_gps64m_s0; results -> results\inavwhu\street00_gps64m_s0\GWO
+Dataset: eth_gps16m_nov_s0; results -> results\eth_gps16m_nov_s0\GWO
 Computing baseline references...
-Baseline EKF (THETA0): 35.3939 m
-Raw GPS:               73.8959 m
+Baseline EKF (THETA0): 10.8184 m
+Raw GPS:               18.8283 m
 
 === GWO | seed=1 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.1279 m
-Change vs baseline EKF:   -5.2660 m
-Change vs raw GPS:        -43.7680 m
+Best whole-flight RMSE_h: 10.0579 m
+Change vs baseline EKF:   -0.7605 m
+Change vs raw GPS:        -8.7704 m
 Evaluations:              1000/1000
-Time:                     808.71 s (objective 808.65 s, 10 generations)
+Time:                     103.52 s (objective 103.48 s, 10 generations)
 
 === GWO | seed=2 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.5464 m
-Change vs baseline EKF:   -5.8475 m
-Change vs raw GPS:        -44.3495 m
+Best whole-flight RMSE_h: 10.0458 m
+Change vs baseline EKF:   -0.7726 m
+Change vs raw GPS:        -8.7825 m
 Evaluations:              1000/1000
-Time:                     805.71 s (objective 805.65 s, 10 generations)
+Time:                     103.30 s (objective 103.27 s, 10 generations)
 
 === GWO | seed=3 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.5427 m
-Change vs baseline EKF:   -5.8512 m
-Change vs raw GPS:        -44.3532 m
+Best whole-flight RMSE_h: 10.1419 m
+Change vs baseline EKF:   -0.6765 m
+Change vs raw GPS:        -8.6864 m
 Evaluations:              1000/1000
-Time:                     812.66 s (objective 812.60 s, 10 generations)
+Time:                     103.24 s (objective 103.21 s, 10 generations)
 
 === GWO | seed=4 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 30.2266 m
-Change vs baseline EKF:   -5.1673 m
-Change vs raw GPS:        -43.6693 m
+Best whole-flight RMSE_h: 10.1822 m
+Change vs baseline EKF:   -0.6362 m
+Change vs raw GPS:        -8.6461 m
 Evaluations:              1000/1000
-Time:                     795.22 s (objective 795.17 s, 10 generations)
+Time:                     103.94 s (objective 103.91 s, 10 generations)
 
 === GWO | seed=5 | budget=1000 | backend=gpu ===
-Best whole-flight RMSE_h: 29.7054 m
-Change vs baseline EKF:   -5.6885 m
-Change vs raw GPS:        -44.1905 m
+Best whole-flight RMSE_h: 10.1380 m
+Change vs baseline EKF:   -0.6804 m
+Change vs raw GPS:        -8.6903 m
 Evaluations:              1000/1000
-Time:                     837.81 s (objective 837.71 s, 10 generations)
+Time:                     103.69 s (objective 103.66 s, 10 generations)
 
-Saved GWO run files to: D:\EKF\results\inavwhu\street00_gps64m_s0\GWO
-  mean NIS of 69 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
-  GWO done: best seed 3 RMSE_h 29.5427 m; search 71.6 min, incumbents 1.2 min
-wrote results\inavwhu\street00_gps64m_s0\results_table.md
-wrote results\inavwhu\street00_gps64m_s0\convergence.png
-  inavwhu/street00_gps64m_s0 finished in 4.76 h
+Saved GWO run files to: D:\EKF\results\eth_gps16m_nov_s0\GWO
+  mean NIS of 70 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GWO done: best seed 2 RMSE_h 10.0458 m; search 9.0 min, incumbents 0.1 min
+wrote results\eth_gps16m_nov_s0\results_table.md
+wrote results\eth_gps16m_nov_s0\convergence.png
+  eth_gps16m_nov_s0 finished in 0.63 h
+
+==================== inavwhu/playground00_gps16m_s0: 265,329 predictions + 1,325 GPS updates per candidate ====================
+  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
+  validation: max |GPU - CPU| 4.02e-10 m -> PASSED (tolerance 1e-06 m)
+  baseline: THETA0 RMSE_h 10.5874 m, raw GPS 18.4794 m, mean NIS 2.92
+
+  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/playground00_gps16m_s0; results -> results\inavwhu\playground00_gps16m_s0\GA
+Computing baseline references...
+Baseline EKF (THETA0): 10.5874 m
+Raw GPS:               18.4794 m
+
+=== GA | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2208 m
+Change vs baseline EKF:   -1.3665 m
+Change vs raw GPS:        -9.2586 m
+Evaluations:              1000/1000
+Time:                     737.70 s (objective 737.67 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -6.598300
+  log_q_gyro   -11.200094
+  log_q_ba     -4.815464
+  log_q_bg     -8.605963
+  log_r_xy      3.563281
+  log_r_z       2.723258
+  log_r_vel     0.289519
+
+=== GA | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2475 m
+Change vs baseline EKF:   -1.3398 m
+Change vs raw GPS:        -9.2319 m
+Evaluations:              1000/1000
+Time:                     737.46 s (objective 737.43 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -3.954900
+  log_q_gyro   -11.320327
+  log_q_ba     -5.217912
+  log_q_bg     -8.706971
+  log_r_xy      3.490472
+  log_r_z       2.533938
+  log_r_vel     0.874364
+
+=== GA | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2269 m
+Change vs baseline EKF:   -1.3605 m
+Change vs raw GPS:        -9.2525 m
+Evaluations:              1000/1000
+Time:                     737.54 s (objective 737.51 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -5.843519
+  log_q_gyro   -7.671233
+  log_q_ba     -4.928563
+  log_q_bg     -8.560551
+  log_r_xy      3.594683
+  log_r_z       2.976545
+  log_r_vel     1.265934
+
+=== GA | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2833 m
+Change vs baseline EKF:   -1.3040 m
+Change vs raw GPS:        -9.1961 m
+Evaluations:              1000/1000
+Time:                     737.59 s (objective 737.56 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -3.649388
+  log_q_gyro   -8.899284
+  log_q_ba     -5.589914
+  log_q_bg     -8.587522
+  log_r_xy      3.565869
+  log_r_z       3.030343
+  log_r_vel    -1.375258
+
+=== GA | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2287 m
+Change vs baseline EKF:   -1.3587 m
+Change vs raw GPS:        -9.2507 m
+Evaluations:              1000/1000
+Time:                     737.50 s (objective 737.47 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -6.713593
+  log_q_gyro   -9.446771
+  log_q_ba     -4.812986
+  log_q_bg     -8.593721
+  log_r_xy      3.592210
+  log_r_z       3.241837
+  log_r_vel    -1.268504
+
+Saved GA run files to: D:\EKF\results\inavwhu\playground00_gps16m_s0\GA
+  mean NIS of 58 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GA done: best seed 1 RMSE_h 9.2208 m; search 64.1 min, incumbents 1.0 min
+
+  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset inavwhu/playground00_gps16m_s0: raw GPS RMSE_h 18.479 m, baseline EKF RMSE_h 10.587 m
+
+=== PSO | seed=1 | budget=1000 | backend=gpu ===
+seed 1  iter   0  k   100  best RMSE_h 9.5329 m  elapsed      74 s
+seed 1  iter   1  k   200  best RMSE_h 9.3465 m  elapsed     148 s
+seed 1  iter   2  k   300  best RMSE_h 9.3465 m  elapsed     222 s
+seed 1  iter   3  k   400  best RMSE_h 9.3465 m  elapsed     296 s
+seed 1  iter   4  k   500  best RMSE_h 9.2782 m  elapsed     369 s
+seed 1  iter   5  k   600  best RMSE_h 9.2683 m  elapsed     443 s
+seed 1  iter   6  k   700  best RMSE_h 9.2598 m  elapsed     517 s
+seed 1  iter   7  k   800  best RMSE_h 9.2598 m  elapsed     590 s
+seed 1  iter   8  k   900  best RMSE_h 9.2490 m  elapsed     664 s
+seed 1  iter   9  k  1000  best RMSE_h 9.2444 m  elapsed     738 s
+seed 1: RMSE_h 9.244 m (vs baseline -1.343 m, vs GPS -9.235 m), mean NIS 0.20, converged at k = 406, N_eval 1000, T_total 738 s (objective 738 s)
+
+=== PSO | seed=2 | budget=1000 | backend=gpu ===
+seed 2  iter   0  k   100  best RMSE_h 9.3162 m  elapsed      74 s
+seed 2  iter   1  k   200  best RMSE_h 9.2886 m  elapsed     148 s
+seed 2  iter   2  k   300  best RMSE_h 9.2886 m  elapsed     222 s
+seed 2  iter   3  k   400  best RMSE_h 9.2839 m  elapsed     296 s
+seed 2  iter   4  k   500  best RMSE_h 9.2490 m  elapsed     370 s
+seed 2  iter   5  k   600  best RMSE_h 9.2490 m  elapsed     443 s
+seed 2  iter   6  k   700  best RMSE_h 9.2490 m  elapsed     517 s
+seed 2  iter   7  k   800  best RMSE_h 9.2471 m  elapsed     591 s
+seed 2  iter   8  k   900  best RMSE_h 9.2322 m  elapsed     664 s
+seed 2  iter   9  k  1000  best RMSE_h 9.2274 m  elapsed     738 s
+seed 2: RMSE_h 9.227 m (vs baseline -1.360 m, vs GPS -9.252 m), mean NIS 0.88, converged at k = 817, N_eval 1000, T_total 738 s (objective 738 s)
+
+=== PSO | seed=3 | budget=1000 | backend=gpu ===
+seed 3  iter   0  k   100  best RMSE_h 9.4836 m  elapsed      74 s
+seed 3  iter   1  k   200  best RMSE_h 9.2737 m  elapsed     148 s
+seed 3  iter   2  k   300  best RMSE_h 9.2717 m  elapsed     222 s
+seed 3  iter   3  k   400  best RMSE_h 9.2386 m  elapsed     296 s
+seed 3  iter   4  k   500  best RMSE_h 9.2386 m  elapsed     369 s
+seed 3  iter   5  k   600  best RMSE_h 9.2386 m  elapsed     443 s
+seed 3  iter   6  k   700  best RMSE_h 9.2386 m  elapsed     517 s
+seed 3  iter   7  k   800  best RMSE_h 9.2301 m  elapsed     590 s
+seed 3  iter   8  k   900  best RMSE_h 9.2301 m  elapsed     664 s
+seed 3  iter   9  k  1000  best RMSE_h 9.2286 m  elapsed     738 s
+seed 3: RMSE_h 9.229 m (vs baseline -1.359 m, vs GPS -9.251 m), mean NIS 0.27, converged at k = 121, N_eval 1000, T_total 738 s (objective 738 s)
+
+=== PSO | seed=4 | budget=1000 | backend=gpu ===
+seed 4  iter   0  k   100  best RMSE_h 9.5402 m  elapsed      74 s
+seed 4  iter   1  k   200  best RMSE_h 9.3535 m  elapsed     148 s
+seed 4  iter   2  k   300  best RMSE_h 9.3089 m  elapsed     222 s
+seed 4  iter   3  k   400  best RMSE_h 9.2305 m  elapsed     296 s
+seed 4  iter   4  k   500  best RMSE_h 9.2305 m  elapsed     369 s
+seed 4  iter   5  k   600  best RMSE_h 9.2305 m  elapsed     443 s
+seed 4  iter   6  k   700  best RMSE_h 9.2304 m  elapsed     517 s
+seed 4  iter   7  k   800  best RMSE_h 9.2304 m  elapsed     590 s
+seed 4  iter   8  k   900  best RMSE_h 9.2289 m  elapsed     664 s
+seed 4  iter   9  k  1000  best RMSE_h 9.2278 m  elapsed     737 s
+seed 4: RMSE_h 9.228 m (vs baseline -1.360 m, vs GPS -9.252 m), mean NIS 0.19, converged at k = 306, N_eval 1000, T_total 737 s (objective 737 s)
+
+=== PSO | seed=5 | budget=1000 | backend=gpu ===
+seed 5  iter   0  k   100  best RMSE_h 9.4771 m  elapsed      74 s
+seed 5  iter   1  k   200  best RMSE_h 9.4031 m  elapsed     148 s
+seed 5  iter   2  k   300  best RMSE_h 9.3102 m  elapsed     222 s
+seed 5  iter   3  k   400  best RMSE_h 9.3102 m  elapsed     296 s
+seed 5  iter   4  k   500  best RMSE_h 9.2287 m  elapsed     369 s
+seed 5  iter   5  k   600  best RMSE_h 9.2287 m  elapsed     443 s
+seed 5  iter   6  k   700  best RMSE_h 9.2287 m  elapsed     517 s
+seed 5  iter   7  k   800  best RMSE_h 9.2257 m  elapsed     590 s
+seed 5  iter   8  k   900  best RMSE_h 9.2257 m  elapsed     664 s
+seed 5  iter   9  k  1000  best RMSE_h 9.2257 m  elapsed     737 s
+seed 5: RMSE_h 9.226 m (vs baseline -1.362 m, vs GPS -9.254 m), mean NIS 0.56, converged at k = 270, N_eval 1000, T_total 737 s (objective 737 s)
+  mean NIS of 67 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  PSO done: best seed 5 RMSE_h 9.2257 m; search 64.1 min, incumbents 1.0 min
+
+  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/playground00_gps16m_s0; results -> results\inavwhu\playground00_gps16m_s0\DE
+Computing baseline references...
+Baseline EKF (THETA0): 10.5874 m
+Raw GPS:               18.4794 m
+
+=== DE | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2432 m
+Change vs baseline EKF:   -1.3441 m
+Change vs raw GPS:        -9.2362 m
+Evaluations:              1000/1000
+Time:                     737.64 s (objective 737.60 s, 10 generations)
+
+=== DE | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2317 m
+Change vs baseline EKF:   -1.3557 m
+Change vs raw GPS:        -9.2477 m
+Evaluations:              1000/1000
+Time:                     737.57 s (objective 737.54 s, 10 generations)
+
+=== DE | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.3012 m
+Change vs baseline EKF:   -1.2862 m
+Change vs raw GPS:        -9.1782 m
+Evaluations:              1000/1000
+Time:                     737.71 s (objective 737.68 s, 10 generations)
+
+=== DE | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2562 m
+Change vs baseline EKF:   -1.3312 m
+Change vs raw GPS:        -9.2232 m
+Evaluations:              1000/1000
+Time:                     737.50 s (objective 737.47 s, 10 generations)
+
+=== DE | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.3544 m
+Change vs baseline EKF:   -1.2330 m
+Change vs raw GPS:        -9.1250 m
+Evaluations:              1000/1000
+Time:                     737.46 s (objective 737.43 s, 10 generations)
+
+Saved DE run files to: D:\EKF\results\inavwhu\playground00_gps16m_s0\DE
+  mean NIS of 45 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  DE done: best seed 2 RMSE_h 9.2317 m; search 64.1 min, incumbents 1.0 min
+
+  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/playground00_gps16m_s0; results -> results\inavwhu\playground00_gps16m_s0\GWO
+Computing baseline references...
+Baseline EKF (THETA0): 10.5874 m
+Raw GPS:               18.4794 m
+
+=== GWO | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2369 m
+Change vs baseline EKF:   -1.3505 m
+Change vs raw GPS:        -9.2425 m
+Evaluations:              1000/1000
+Time:                     737.49 s (objective 737.45 s, 10 generations)
+
+=== GWO | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2361 m
+Change vs baseline EKF:   -1.3513 m
+Change vs raw GPS:        -9.2433 m
+Evaluations:              1000/1000
+Time:                     737.66 s (objective 737.63 s, 10 generations)
+
+=== GWO | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2910 m
+Change vs baseline EKF:   -1.2963 m
+Change vs raw GPS:        -9.1884 m
+Evaluations:              1000/1000
+Time:                     737.42 s (objective 737.38 s, 10 generations)
+
+=== GWO | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2844 m
+Change vs baseline EKF:   -1.3030 m
+Change vs raw GPS:        -9.1950 m
+Evaluations:              1000/1000
+Time:                     737.51 s (objective 737.47 s, 10 generations)
+
+=== GWO | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 9.2892 m
+Change vs baseline EKF:   -1.2981 m
+Change vs raw GPS:        -9.1902 m
+Evaluations:              1000/1000
+Time:                     737.59 s (objective 737.56 s, 10 generations)
+
+Saved GWO run files to: D:\EKF\results\inavwhu\playground00_gps16m_s0\GWO
+  mean NIS of 51 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GWO done: best seed 2 RMSE_h 9.2361 m; search 64.1 min, incumbents 1.0 min
+wrote results\inavwhu\playground00_gps16m_s0\results_table.md
+wrote results\inavwhu\playground00_gps16m_s0\convergence.png
+  inavwhu/playground00_gps16m_s0 finished in 4.43 h
+
+==================== inavwhu/street00_gps16m_s0: 280,292 predictions + 1,400 GPS updates per candidate ====================
+  validation: GA seed 1, the first 24 candidates of generation 1, GPU vs filterpy (12 CPU workers)
+  validation: max |GPU - CPU| 5.58e-08 m -> PASSED (tolerance 1e-06 m)
+  baseline: THETA0 RMSE_h 10.0719 m, raw GPS 18.4885 m, mean NIS 2.90
+
+  ---- GA: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/street00_gps16m_s0; results -> results\inavwhu\street00_gps16m_s0\GA
+Computing baseline references...
+Baseline EKF (THETA0): 10.0719 m
+Raw GPS:               18.4885 m
+
+=== GA | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7778 m
+Change vs baseline EKF:   -1.2941 m
+Change vs raw GPS:        -9.7108 m
+Evaluations:              1000/1000
+Time:                     778.07 s (objective 778.04 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -5.552027
+  log_q_gyro   -5.842930
+  log_q_ba     -8.000000
+  log_q_bg     -7.649990
+  log_r_xy      4.409886
+  log_r_z       3.830937
+  log_r_vel     0.225546
+
+=== GA | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7723 m
+Change vs baseline EKF:   -1.2995 m
+Change vs raw GPS:        -9.7162 m
+Evaluations:              1000/1000
+Time:                     778.36 s (objective 778.33 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -4.202650
+  log_q_gyro   -5.842930
+  log_q_ba     -8.000000
+  log_q_bg     -7.562114
+  log_r_xy      4.389713
+  log_r_z       3.996684
+  log_r_vel     0.292000
+
+=== GA | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7840 m
+Change vs baseline EKF:   -1.2879 m
+Change vs raw GPS:        -9.7045 m
+Evaluations:              1000/1000
+Time:                     778.37 s (objective 778.34 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -6.695866
+  log_q_gyro   -10.214289
+  log_q_ba     -7.995055
+  log_q_bg     -7.455537
+  log_r_xy      4.409886
+  log_r_z       4.021631
+  log_r_vel     1.310476
+
+=== GA | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7813 m
+Change vs baseline EKF:   -1.2905 m
+Change vs raw GPS:        -9.7072 m
+Evaluations:              1000/1000
+Time:                     778.29 s (objective 778.27 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -4.144257
+  log_q_gyro   -5.842930
+  log_q_ba     -6.940459
+  log_q_bg     -8.744875
+  log_r_xy      3.584832
+  log_r_z       3.812215
+  log_r_vel     0.444085
+
+=== GA | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7914 m
+Change vs baseline EKF:   -1.2805 m
+Change vs raw GPS:        -9.6971 m
+Evaluations:              1000/1000
+Time:                     778.42 s (objective 778.39 s, 10 generations)
+Best parameter vector (log10):
+  log_q_acc    -4.861518
+  log_q_gyro   -10.467067
+  log_q_ba     -8.000000
+  log_q_bg     -7.501857
+  log_r_xy      4.405809
+  log_r_z       4.297941
+  log_r_vel    -0.102448
+
+Saved GA run files to: D:\EKF\results\inavwhu\street00_gps16m_s0\GA
+  mean NIS of 80 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GA done: best seed 2 RMSE_h 8.7723 m; search 67.6 min, incumbents 1.2 min
+
+  ---- PSO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset inavwhu/street00_gps16m_s0: raw GPS RMSE_h 18.489 m, baseline EKF RMSE_h 10.072 m
+
+=== PSO | seed=1 | budget=1000 | backend=gpu ===
+seed 1  iter   0  k   100  best RMSE_h 9.0219 m  elapsed      78 s
+seed 1  iter   1  k   200  best RMSE_h 8.8744 m  elapsed     156 s
+seed 1  iter   2  k   300  best RMSE_h 8.8422 m  elapsed     235 s
+seed 1  iter   3  k   400  best RMSE_h 8.8169 m  elapsed     312 s
+seed 1  iter   4  k   500  best RMSE_h 8.8082 m  elapsed     390 s
+seed 1  iter   5  k   600  best RMSE_h 8.8011 m  elapsed     468 s
+seed 1  iter   6  k   700  best RMSE_h 8.7964 m  elapsed     546 s
+seed 1  iter   7  k   800  best RMSE_h 8.7929 m  elapsed     623 s
+seed 1  iter   8  k   900  best RMSE_h 8.7810 m  elapsed     701 s
+seed 1  iter   9  k  1000  best RMSE_h 8.7743 m  elapsed     779 s
+seed 1: RMSE_h 8.774 m (vs baseline -1.298 m, vs GPS -9.714 m), mean NIS 0.10, converged at k = 244, N_eval 1000, T_total 779 s (objective 779 s)
+
+=== PSO | seed=2 | budget=1000 | backend=gpu ===
+seed 2  iter   0  k   100  best RMSE_h 8.8577 m  elapsed      78 s
+seed 2  iter   1  k   200  best RMSE_h 8.7992 m  elapsed     156 s
+seed 2  iter   2  k   300  best RMSE_h 8.7992 m  elapsed     234 s
+seed 2  iter   3  k   400  best RMSE_h 8.7934 m  elapsed     312 s
+seed 2  iter   4  k   500  best RMSE_h 8.7873 m  elapsed     390 s
+seed 2  iter   5  k   600  best RMSE_h 8.7840 m  elapsed     468 s
+seed 2  iter   6  k   700  best RMSE_h 8.7840 m  elapsed     546 s
+seed 2  iter   7  k   800  best RMSE_h 8.7840 m  elapsed     623 s
+seed 2  iter   8  k   900  best RMSE_h 8.7823 m  elapsed     701 s
+seed 2  iter   9  k  1000  best RMSE_h 8.7823 m  elapsed     779 s
+seed 2: RMSE_h 8.782 m (vs baseline -1.290 m, vs GPS -9.706 m), mean NIS 0.09, converged at k = 147, N_eval 1000, T_total 779 s (objective 779 s)
+
+=== PSO | seed=3 | budget=1000 | backend=gpu ===
+seed 3  iter   0  k   100  best RMSE_h 9.0283 m  elapsed      78 s
+seed 3  iter   1  k   200  best RMSE_h 8.9617 m  elapsed     156 s
+seed 3  iter   2  k   300  best RMSE_h 8.8208 m  elapsed     234 s
+seed 3  iter   3  k   400  best RMSE_h 8.8208 m  elapsed     312 s
+seed 3  iter   4  k   500  best RMSE_h 8.8045 m  elapsed     390 s
+seed 3  iter   5  k   600  best RMSE_h 8.7904 m  elapsed     468 s
+seed 3  iter   6  k   700  best RMSE_h 8.7828 m  elapsed     546 s
+seed 3  iter   7  k   800  best RMSE_h 8.7820 m  elapsed     624 s
+seed 3  iter   8  k   900  best RMSE_h 8.7820 m  elapsed     701 s
+seed 3  iter   9  k  1000  best RMSE_h 8.7819 m  elapsed     779 s
+seed 3: RMSE_h 8.782 m (vs baseline -1.290 m, vs GPS -9.707 m), mean NIS 0.10, converged at k = 204, N_eval 1000, T_total 779 s (objective 779 s)
+
+=== PSO | seed=4 | budget=1000 | backend=gpu ===
+seed 4  iter   0  k   100  best RMSE_h 8.9939 m  elapsed      78 s
+seed 4  iter   1  k   200  best RMSE_h 8.8579 m  elapsed     156 s
+seed 4  iter   2  k   300  best RMSE_h 8.7934 m  elapsed     234 s
+seed 4  iter   3  k   400  best RMSE_h 8.7806 m  elapsed     312 s
+seed 4  iter   4  k   500  best RMSE_h 8.7705 m  elapsed     390 s
+seed 4  iter   5  k   600  best RMSE_h 8.7705 m  elapsed     468 s
+seed 4  iter   6  k   700  best RMSE_h 8.7705 m  elapsed     546 s
+seed 4  iter   7  k   800  best RMSE_h 8.7698 m  elapsed     624 s
+seed 4  iter   8  k   900  best RMSE_h 8.7698 m  elapsed     701 s
+seed 4  iter   9  k  1000  best RMSE_h 8.7689 m  elapsed     779 s
+seed 4: RMSE_h 8.769 m (vs baseline -1.303 m, vs GPS -9.720 m), mean NIS 0.09, converged at k = 270, N_eval 1000, T_total 779 s (objective 779 s)
+
+=== PSO | seed=5 | budget=1000 | backend=gpu ===
+seed 5  iter   0  k   100  best RMSE_h 9.5345 m  elapsed      78 s
+seed 5  iter   1  k   200  best RMSE_h 9.0080 m  elapsed     156 s
+seed 5  iter   2  k   300  best RMSE_h 8.9663 m  elapsed     234 s
+seed 5  iter   3  k   400  best RMSE_h 8.8359 m  elapsed     312 s
+seed 5  iter   4  k   500  best RMSE_h 8.8230 m  elapsed     390 s
+seed 5  iter   5  k   600  best RMSE_h 8.8106 m  elapsed     468 s
+seed 5  iter   6  k   700  best RMSE_h 8.7916 m  elapsed     546 s
+seed 5  iter   7  k   800  best RMSE_h 8.7823 m  elapsed     623 s
+seed 5  iter   8  k   900  best RMSE_h 8.7818 m  elapsed     701 s
+seed 5  iter   9  k  1000  best RMSE_h 8.7818 m  elapsed     779 s
+seed 5: RMSE_h 8.782 m (vs baseline -1.290 m, vs GPS -9.707 m), mean NIS 0.09, converged at k = 442, N_eval 1000, T_total 779 s (objective 779 s)
+  mean NIS of 89 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  PSO done: best seed 4 RMSE_h 8.7689 m; search 67.7 min, incumbents 1.2 min
+
+  ---- DE: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/street00_gps16m_s0; results -> results\inavwhu\street00_gps16m_s0\DE
+Computing baseline references...
+Baseline EKF (THETA0): 10.0719 m
+Raw GPS:               18.4885 m
+
+=== DE | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7966 m
+Change vs baseline EKF:   -1.2752 m
+Change vs raw GPS:        -9.6919 m
+Evaluations:              1000/1000
+Time:                     778.89 s (objective 778.86 s, 10 generations)
+
+=== DE | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7821 m
+Change vs baseline EKF:   -1.2898 m
+Change vs raw GPS:        -9.7064 m
+Evaluations:              1000/1000
+Time:                     778.58 s (objective 778.54 s, 10 generations)
+
+=== DE | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7910 m
+Change vs baseline EKF:   -1.2809 m
+Change vs raw GPS:        -9.6975 m
+Evaluations:              1000/1000
+Time:                     778.39 s (objective 778.36 s, 10 generations)
+
+=== DE | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7835 m
+Change vs baseline EKF:   -1.2884 m
+Change vs raw GPS:        -9.7050 m
+Evaluations:              1000/1000
+Time:                     778.67 s (objective 778.64 s, 10 generations)
+
+=== DE | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7852 m
+Change vs baseline EKF:   -1.2866 m
+Change vs raw GPS:        -9.7033 m
+Evaluations:              1000/1000
+Time:                     778.70 s (objective 778.67 s, 10 generations)
+
+Saved DE run files to: D:\EKF\results\inavwhu\street00_gps16m_s0\DE
+  mean NIS of 43 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  DE done: best seed 2 RMSE_h 8.7821 m; search 67.7 min, incumbents 1.0 min
+
+  ---- GWO: population 100, 1000 evaluations x seeds [1, 2, 3, 4, 5] ----
+  seeds: 1 run, 2 run, 3 run, 4 run, 5 run
+Dataset: inavwhu/street00_gps16m_s0; results -> results\inavwhu\street00_gps16m_s0\GWO
+Computing baseline references...
+Baseline EKF (THETA0): 10.0719 m
+Raw GPS:               18.4885 m
+
+=== GWO | seed=1 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7745 m
+Change vs baseline EKF:   -1.2974 m
+Change vs raw GPS:        -9.7140 m
+Evaluations:              1000/1000
+Time:                     777.96 s (objective 777.92 s, 10 generations)
+
+=== GWO | seed=2 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7691 m
+Change vs baseline EKF:   -1.3028 m
+Change vs raw GPS:        -9.7194 m
+Evaluations:              1000/1000
+Time:                     778.70 s (objective 778.66 s, 10 generations)
+
+=== GWO | seed=3 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7821 m
+Change vs baseline EKF:   -1.2898 m
+Change vs raw GPS:        -9.7064 m
+Evaluations:              1000/1000
+Time:                     778.96 s (objective 778.93 s, 10 generations)
+
+=== GWO | seed=4 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7728 m
+Change vs baseline EKF:   -1.2991 m
+Change vs raw GPS:        -9.7158 m
+Evaluations:              1000/1000
+Time:                     778.56 s (objective 778.52 s, 10 generations)
+
+=== GWO | seed=5 | budget=1000 | backend=gpu ===
+Best whole-flight RMSE_h: 8.7864 m
+Change vs baseline EKF:   -1.2855 m
+Change vs raw GPS:        -9.7021 m
+Evaluations:              1000/1000
+Time:                     778.77 s (objective 778.74 s, 10 generations)
+
+Saved GWO run files to: D:\EKF\results\inavwhu\street00_gps16m_s0\GWO
+  mean NIS of 62 incumbents (seeds [1, 2, 3, 4, 5]) on the GPU
+  GWO done: best seed 2 RMSE_h 8.7691 m; search 67.7 min, incumbents 1.1 min
+wrote results\inavwhu\street00_gps16m_s0\results_table.md
+wrote results\inavwhu\street00_gps16m_s0\convergence.png
+  inavwhu/street00_gps16m_s0 finished in 4.68 h
 wrote results\summary\results_table.md
 wrote results\summary\best_values.md
-wrote results\summary\response_surface_GA.png
-wrote results\summary\response_surface_GA.html
-wrote results\summary\response_surface_PSO.png
-wrote results\summary\response_surface_PSO.html
-wrote results\summary\response_surface_DE.png
-wrote results\summary\response_surface_DE.html
-wrote results\summary\response_surface_GWO.png
-wrote results\summary\response_surface_GWO.html
+wrote results\summary\convergence.png
+wrote results\summary\accuracy_vs_convergence.png
+wrote results\eth_gps16m_nov_s0\map.png
+wrote results\eth_gps16m_nov_s0\map.html
+wrote results\inavwhu\playground00_gps16m_s0\map.png
+wrote results\inavwhu\playground00_gps16m_s0\map.html
+wrote results\inavwhu\street00_gps16m_s0\map.png
+wrote results\inavwhu\street00_gps16m_s0\map.html
 
-All done in 4.77 h. Summary: results\summary
+All done in 9.77 h. Summary: results\summary
