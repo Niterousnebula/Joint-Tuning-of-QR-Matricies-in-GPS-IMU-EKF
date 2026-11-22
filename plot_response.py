@@ -5,13 +5,13 @@
 
 Per dataset (results/<scenario>/<dataset>/), from runs.csv and convergence_seed<s>.csv of baseline, GA,
 PSO, DE and GWO (written by ekf.save_run):
-    results_table.md/.csv   mean +- std per optimizer: objective J, accuracy (RMSE_h), consistency (NIS),
+    results_table.md/.csv   mean +- std per optimizer: optimizer score, accuracy (RMSE_h), consistency (NIS),
                             convergence, compute
     convergence.png         best-so-far objective against evaluations, every seed and the median
 
 results/<scenario>/summary/ (one panel per dataset):
     results_table.md/.csv        every dataset and optimizer in one table
-    best_values.md/.csv          the best seed (lowest J) of each optimizer on each dataset, with its theta
+    best_values.md/.csv          the best seed (lowest optimizer score) of each optimizer on each dataset, with its theta
     convergence.png              each optimizer's median best-so-far objective, band = best to worst seed
     accuracy_vs_nis.png          the two measures: RMSE_h against mean NIS, one dot per seed, a diamond
                                  per optimizer mean, the consistent NIS (= dof) marked
@@ -35,7 +35,7 @@ GROUPS = ["baseline", *OPTIMIZERS]
 COLORS = {"baseline": "#555555", "GA": "#1f77b4", "PSO": "#ff7f0e", "DE": "#2ca02c", "GWO": "#d62728"}
 
 # Table columns in the fixed order: objective, accuracy, consistency, convergence, compute
-TABLE = [("fitness", "Objective J"),
+TABLE = [("fitness", "Optimizer score"),
          ("rmse_h", "Whole-flight RMSE_h (m)"),
          ("delta_vs_baseline", "vs baseline EKF (m)"),
          ("delta_vs_gps", "vs raw GPS (m)"),
@@ -70,10 +70,10 @@ def load_runs(out, groups=GROUPS):
 
 
 def objective(runs):
-    """(column, axis label) of what the search minimised: J, or RMSE_h for runs scored on it alone."""
+    """(column, axis label) of what the search minimised: the optimizer score, or RMSE_h for runs scored on it alone."""
     w = runs["nis_weight"].iloc[0] if "nis_weight" in runs and len(runs) else 0.0
     if "fitness" in runs and w:
-        return "fitness", f"J = RMSE_h (1 + {w:g} |log10(NIS/dof)|)"
+        return "fitness", f"optimizer score = RMSE_h (1 + {w:g} |log10(NIS/dof)|)"
     return "rmse_h", "RMSE_h (m)"
 
 
@@ -268,7 +268,7 @@ def summary(root, datasets, optimizers=OPTIMIZERS):
     allt = pd.concat(rows)
     allt.to_csv(out / "results_table.csv")
     keep = ["fitness", "rmse_h", "delta_vs_baseline", "delta_vs_gps", "mean_nis", "evals_to_converge", "t_total"]
-    lines = ["| Dataset | Method | Runs | J | RMSE_h (m) | vs baseline (m) | vs raw GPS (m) | Mean NIS (dof) | "
+    lines = ["| Dataset | Method | Runs | Optimizer score | RMSE_h (m) | vs baseline (m) | vs raw GPS (m) | Mean NIS (dof) | "
              "Evals to 99 % | T_total (s) |",
              "|---|---|---:|---:|---:|---:|---:|---:|---:|---:|"]
     for name, r in allt.iterrows():
@@ -281,7 +281,7 @@ def summary(root, datasets, optimizers=OPTIMIZERS):
     if best:
         b = pd.DataFrame(best)
         b.to_csv(out / "best_values.csv", index=False)
-        head = ("| Dataset | Optimizer (seed) | J | RMSE_h (m) | vs GPS (m) | NIS | "
+        head = ("| Dataset | Optimizer (seed) | Optimizer score | RMSE_h (m) | vs GPS (m) | NIS | "
                 + " | ".join(f"`{t}`" for t in THETA_NAMES) + " |")
         lines = [head, "|---|---|" + "---:|" * (4 + len(THETA_NAMES))]
         for _, r in b.iterrows():

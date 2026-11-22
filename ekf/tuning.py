@@ -60,7 +60,7 @@ def theta_to_QR(theta):
 
 
 def objective_value(rmse_h, mean_nis, dof, ok=True):
-    """J from the two measures, element-wise for arrays; PENALTY for a failed run."""
+    """The optimizer score J from the two measures, element-wise for arrays; PENALTY for a failed run."""
     rmse_h, mean_nis = np.asarray(rmse_h, dtype=float), np.asarray(mean_nis, dtype=float)
     w = OBJECTIVE["nis_weight"]
     with np.errstate(divide="ignore", invalid="ignore"):
@@ -141,7 +141,7 @@ def evaluate(data, theta, bias0=None, x0=None):
 
 
 def fitness(data, theta):
-    """The optimization objective J(theta): whole-flight RMSE_h weighted by NIS consistency."""
+    """The optimizer score J(theta): whole-flight RMSE_h weighted by NIS consistency."""
     return evaluate(data, theta)["fitness"]
 
 

@@ -1,6 +1,6 @@
 Dataset `inavwhu/street00_outages_s0`. Raw GPS RMSE_h 3.202 m.
 
-| Optimizer | Runs | Objective J | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 3) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
+| Optimizer | Runs | Optimizer score | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 3) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | baseline | 1 | 6.475 | 3.940 | 0.000 | 0.738 | 13.199 | 0.643 | 1 | 1 | 1 | 27.381 | 27.381 |
 | GA | 5 | 2.265 ± 0.098 | 2.222 ± 0.109 | -1.718 ± 0.109 | -0.979 ± 0.109 | 2.949 ± 0.175 | 0.019 ± 0.017 | 593 ± 221 | 755 ± 267 | 1,000 | 772.179 ± 0.097 | 0.772 ± 0.000 |

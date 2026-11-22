@@ -13,7 +13,7 @@ results/<scenario>/:
               75 % of the path: about 5 m added error, about 15 m, and a complete outage. Also writes
               sections.md/png (plot_sections.py): how each filter behaves in those sections.
     gps16m    the first run, kept in results/gps16m/: 16 m white GPS noise everywhere, position-only.
-Objective (NIS_WEIGHT): outages scores accuracy and consistency together, J = RMSE_h * (1 + |log10(mean
+Optimizer score (NIS_WEIGHT): outages scores accuracy and consistency together, score = RMSE_h * (1 + |log10(mean
 NIS / dof)|) (ekf.tuning.objective_value); gps16m keeps run 1's RMSE_h alone. GPS plausibility rule
 (PLAUSIBILITY): outages discards any fix the platform could not have reached (ekf.filter.OPTIONS).
 Preparing the datasets processes raw_data/ if needed and writes the degraded copies
@@ -22,7 +22,7 @@ serves one at a time: GA, PSO, DE, GWO, each with its own config (population 100
 evaluations per seed, seeds 1-5, BACKEND = "gpu"). Per dataset:
 
     1. validation   the first candidates GA scores for seed 1 are scored again by the filterpy
-                    reference on the CPU; the run stops if any difference (J, RMSE, NIS) exceeds the tolerance
+                    reference on the CPU; the run stops if any difference (score, RMSE, NIS) exceeds the tolerance
     2. baseline     THETA0 through the same fitness
     3. GA, PSO, DE, GWO: every seed, then the accounting check (n_evals = n_objective_evals =
                     convergence rows = MAX_EVALS) and the mean NIS of every incumbent on the
@@ -215,7 +215,7 @@ def validate(data, out, population, n_candidates, n_workers):
     if summary_path.exists():
         summary = json.loads(summary_path.read_text())
         if summary.get("passed"):
-            say(f"  validation: already passed (max difference of J {summary['max_diff_fitness']:.2e})")
+            say(f"  validation: already passed (max difference of the score {summary['max_diff_fitness']:.2e})")
             return summary
     out.mkdir(parents=True, exist_ok=True)
     n = min(n_candidates, population)
@@ -237,7 +237,7 @@ def validate(data, out, population, n_candidates, n_workers):
         say(f"  validation: {summary['n_unstable_excluded']} numerically chaotic candidate(s) (mean NIS > "
             f"{summary['nis_unstable']:g}) left out of the tolerance check; their |GPU - CPU| is up to "
             f"{summary['max_diff_fitness_unstable']:.1f} m, as rounding decides them on any backend")
-    say(f"  validation: max |GPU - CPU| of J {summary['max_diff_fitness']:.2e} -> "
+    say(f"  validation: max |GPU - CPU| of the score {summary['max_diff_fitness']:.2e} -> "
         f"{'PASSED' if summary['passed'] else 'FAILED'} (tolerance {TOL_RMSE:g}, relative above 1)")
     return summary
 
@@ -254,7 +254,7 @@ def baseline(data, out):
         rmse_base = row["rmse_h"]
         row.update(delta_vs_baseline=0.0, improvement_vs_baseline_pct=0.0)
         ekf.save_run(out, row, tracker)
-    say(f"  baseline: THETA0 J {row['fitness']:.4f}, RMSE_h {rmse_base:.4f} m, mean NIS {row['mean_nis']:.2f} "
+    say(f"  baseline: THETA0 score {row['fitness']:.4f}, RMSE_h {rmse_base:.4f} m, mean NIS {row['mean_nis']:.2f} "
         f"(consistent: {row['nis_dof']}), raw GPS {rmse_gps:.4f} m")
     return {"rmse_h": rmse_base, "rmse_gps": rmse_gps}
 
@@ -296,7 +296,7 @@ def run_optimizer(name, data, out, smoke):
             table.to_csv(out / f"incumbents_seed{s}.csv", index=False)
     t_inc = time.perf_counter() - t1
     best = runs.loc[runs["fitness"].idxmin()]
-    say(f"  {name} done: best seed {int(best['seed'])} J {best['fitness']:.4f}, RMSE_h {best['rmse_h']:.4f} m, "
+    say(f"  {name} done: best seed {int(best['seed'])} score {best['fitness']:.4f}, RMSE_h {best['rmse_h']:.4f} m, "
         f"mean NIS {best['mean_nis']:.2f}; "
         f"search {t_search / 60:.1f} min, incumbents {t_inc / 60:.1f} min")
     return {"seeds_run": to_run, "search_s": t_search, "incumbents_s": t_inc, "checks": checks}

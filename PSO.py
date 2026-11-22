@@ -39,7 +39,7 @@ class RunLog:
         rows.insert(0, "seed", self.seed)
         rows.to_csv(self.path, mode="a", index=False, header=not self.path.exists())
         print(f"seed {self.seed}  iter {iteration:3d}  k {cost_fn.n_evals:5d}  "
-              f"best J {cost_fn.best_cost:.4f}  elapsed {cost_fn.t_total:7.0f} s", flush=True)
+              f"best score {cost_fn.best_cost:.4f}  elapsed {cost_fn.t_total:7.0f} s", flush=True)
 
 
 def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE, log=None):
