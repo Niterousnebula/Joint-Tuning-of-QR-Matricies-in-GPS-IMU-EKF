@@ -39,7 +39,7 @@ class RunLog:
         rows.insert(0, "seed", self.seed)
         rows.to_csv(self.path, mode="a", index=False, header=not self.path.exists())
         print(f"seed {self.seed}  iter {iteration:3d}  k {cost_fn.n_evals:5d}  "
-              f"best RMSE_h {cost_fn.best_cost:.4f} m  elapsed {cost_fn.t_total:7.0f} s", flush=True)
+              f"best J {cost_fn.best_cost:.4f}  elapsed {cost_fn.t_total:7.0f} s", flush=True)
 
 
 def pso(cost_fn, rng, swarm_size=cfg.SWARM_SIZE, log=None):
@@ -114,7 +114,7 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None, population_size=Non
     backend = cfg.BACKEND if backend is None else backend
 
     rmse_gps = ekf.gps_rmse(data)
-    rmse_baseline = ekf.fitness(data, ekf.THETA0)   # reference only, not part of the budget
+    rmse_baseline = ekf.evaluate(data, ekf.THETA0)["rmse_h"]   # reference only, not part of the budget
     print(f"Dataset {dataset}: raw GPS RMSE_h {rmse_gps:.3f} m, baseline EKF RMSE_h {rmse_baseline:.3f} m", flush=True)
 
     for seed in seeds:
