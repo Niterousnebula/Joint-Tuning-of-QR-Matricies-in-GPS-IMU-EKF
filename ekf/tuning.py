@@ -1,9 +1,11 @@
 """Decision vector, the canonical fitness function, and the benchmark metrics.
 
 Q/R calibration is offline and uses the complete flight. Every candidate is scored by
-one full-flight EKF run and its whole-flight horizontal RMSE (`fitness`). The baseline
-and every optimizer call this same function, through `FitnessTracker`, which also
-counts evaluations, records the best-so-far curve and times the run.
+one full-flight EKF run on two measures, accuracy (whole-flight horizontal RMSE) and
+consistency (mean NIS against its expected value), combined into one number by
+`objective_value` (`fitness`). The baseline and every optimizer call this same function,
+through `FitnessTracker`, which also counts evaluations, records the best-so-far curve and
+times the run.
 """
 import time
 from multiprocessing import Pool
@@ -39,7 +41,11 @@ def set_search_space(theta0):
     LOWER_TIGHT[:] = THETA0 - HALF_WIDTH / 2
     UPPER_TIGHT[:] = THETA0 + HALF_WIDTH / 2
 
-PENALTY = 1000.0        # m; fitness of a run that fails
+PENALTY = 1e6           # fitness of a run that fails; above any run that does not (|position| < MAX_POSITION = 1e6 m)
+# The objective J = RMSE_h * (1 + nis_weight * |log10(mean NIS / dof)|): a consistent filter (mean NIS =
+# dof) scores its RMSE_h, one whose NIS is 10x too high or too low counts as nis_weight + 1 times worse.
+# nis_weight = 0 is RMSE_h alone (run 1, scenario gps16m). main.py sets it per scenario.
+OBJECTIVE = {"nis_weight": 1.0}
 NIS_DOF = N_MEAS        # full GPS position + velocity: a consistent filter averages NIS = 6.
                         # A dataset missing channels has fewer: use ekf.nis_dof(data)
 CONVERGENCE_FRACTION = 0.99
@@ -51,6 +57,22 @@ def theta_to_QR(theta):
     Q_c = np.r_[np.full(3, var[0]), np.full(3, var[1]), np.full(3, var[2]), np.full(3, var[3])]
     R = np.diag([var[4], var[4], var[5], var[6], var[6], var[6]])
     return Q_c, R
+
+
+def objective_value(rmse_h, mean_nis, dof, ok=True):
+    """J from the two measures, element-wise for arrays; PENALTY for a failed run."""
+    rmse_h, mean_nis = np.asarray(rmse_h, dtype=float), np.asarray(mean_nis, dtype=float)
+    w = OBJECTIVE["nis_weight"]
+    with np.errstate(divide="ignore", invalid="ignore"):
+        j = rmse_h * (1.0 + w * np.abs(np.log10(mean_nis / dof))) if w else rmse_h.copy()
+    j = np.where(np.asarray(ok) & np.isfinite(j), j, PENALTY)
+    return float(j) if j.ndim == 0 else j
+
+
+def nis_consistency(mean_nis, dof):
+    """|log10(mean NIS / dof)|: 0 for a consistent filter, 1 for NIS 10x off either way."""
+    with np.errstate(divide="ignore", invalid="ignore"):
+        return np.abs(np.log10(np.asarray(mean_nis, dtype=float) / dof))
 
 
 def clip_theta(theta, lower=LOWER, upper=UPPER):
@@ -90,8 +112,8 @@ def gps_rmse(data):
 def evaluate(data, theta, bias0=None, x0=None):
     """One complete EKF run for theta, with the fitness and the secondary diagnostics.
 
-    Returns a dict: rmse_h (the fitness, PENALTY on failure), rmse_v, rmse_3d, mean_nis,
-    ok, x_log, innovation_log and n_rejected (GPS fixes skipped by the gate).
+    Returns a dict: fitness (J, objective_value), rmse_h (PENALTY on failure), rmse_v, rmse_3d,
+    mean_nis, ok, x_log, innovation_log and n_rejected (GPS fixes skipped by the gate).
 
     bias0 (optional, 6 values [b_a, b_g]) sets the initial bias states, which the filter
     then keeps estimating; x0 (optional) replaces the initial state from init_state.
@@ -114,15 +136,16 @@ def evaluate(data, theta, bias0=None, x0=None):
             out.update(rmse_h=rmse_h, rmse_v=rmse(err[:, 2]), rmse_3d=rmse(np.linalg.norm(err, axis=1)))
         else:
             out["ok"] = False
+    out["fitness"] = objective_value(out["rmse_h"], mean_nis, nis_dof(data), out["ok"])
     return out
 
 
 def fitness(data, theta):
-    """The optimization objective J(theta): whole-flight horizontal RMSE in metres."""
-    return evaluate(data, theta)["rmse_h"]
+    """The optimization objective J(theta): whole-flight RMSE_h weighted by NIS consistency."""
+    return evaluate(data, theta)["fitness"]
 
 
-METRIC_KEYS = ("rmse_h", "rmse_v", "rmse_3d", "mean_nis", "ok")
+METRIC_KEYS = ("rmse_h", "rmse_v", "rmse_3d", "mean_nis", "ok", "fitness")
 
 
 def _metrics(data, theta):
@@ -140,12 +163,14 @@ _worker_data = None
 RESCORE_WORKERS = 1
 
 
-def _init_worker(data, options=None):
-    """Pool initializer: the dataset, and the parent's filter OPTIONS (spawned workers start fresh)."""
+def _init_worker(data, options=None, objective=None):
+    """Pool initializer: the dataset, and the parent's filter OPTIONS and OBJECTIVE (spawned workers start fresh)."""
     global _worker_data
     _worker_data = data
     if options:
         OPTIONS.update(options)
+    if objective:
+        OBJECTIVE.update(objective)
 
 
 def _worker_perturbed_rmse(args):
@@ -165,7 +190,7 @@ def cpu_metrics_many(data, thetas, n_workers=1):
     """Reference (filterpy) metrics for many candidates: dict of arrays, METRIC_KEYS."""
     thetas = list(np.atleast_2d(np.asarray(thetas, dtype=float)))
     if n_workers > 1:
-        with Pool(n_workers, initializer=_init_worker, initargs=(data, dict(OPTIONS))) as pool:
+        with Pool(n_workers, initializer=_init_worker, initargs=(data, dict(OPTIONS), dict(OBJECTIVE))) as pool:
             rows = pool.map(_worker_metrics, thetas)
     else:
         rows = [_metrics(data, t) for t in thetas]
@@ -250,7 +275,7 @@ class FitnessTracker:
             costs = list(self._gpu.fitness(np.asarray(thetas)))
         elif self.n_workers > 1 and len(thetas) > 1:
             if self._pool is None:
-                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data, dict(OPTIONS)))
+                self._pool = Pool(self.n_workers, initializer=_init_worker, initargs=(self.data, dict(OPTIONS), dict(OBJECTIVE)))
             costs = self._pool.map(_worker_fitness, thetas)
         else:
             costs = [fitness(self.data, t) for t in thetas]
@@ -349,7 +374,7 @@ def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=
     n_workers = RESCORE_WORKERS if n_workers is None else n_workers
     tasks = [(kwargs, theta, bias0) for kwargs in perturbations.values()]
     if n_workers > 1:
-        with Pool(min(n_workers, len(tasks)), initializer=_init_worker, initargs=(data, dict(OPTIONS))) as pool:
+        with Pool(min(n_workers, len(tasks)), initializer=_init_worker, initargs=(data, dict(OPTIONS), dict(OBJECTIVE))) as pool:
             values = pool.map(_worker_perturbed_rmse, tasks)
     else:
         values = [evaluate(perturb(data, **kw), t, bias0=b)["rmse_h"] for kw, t, b in tasks]
@@ -367,14 +392,15 @@ def robustness(data, theta, rmse_clean=None, perturbations=PERTURBATIONS, bias0=
 # ---------------------------------------------------------------------------
 def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=None,
                 population_size=None):
-    """Score the tracker's best theta: accuracy (rmse_h, mean_nis), convergence
+    """Score the tracker's best theta: the objective (fitness), accuracy (rmse_h), consistency
+    (mean_nis, nis_consistency), convergence
     (evals_to_converge, evals_to_best) and compute (n_evals, t_total, t_eval, t_objective).
     Also reports the comparison with the baseline EKF and with raw GPS separately.
     Robustness is not part of the row; call ekf.robustness for it.
 
     The final theta is always re-scored with the filterpy reference on the CPU, so
     rmse_h comes from the reference filter whichever backend
-    drove the search. best_fitness_search is the value the search saw;
+    drove the search. rmse_baseline is the baseline's RMSE_h (not its J). best_fitness_search is the J the search saw;
     search_vs_final_diff is their difference (rounding only, for the GPU backend).
     """
     theta = tracker.best_theta
@@ -382,11 +408,14 @@ def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=Non
     rmse_gps = gps_rmse(data) if rmse_gps is None else rmse_gps
     row = {"optimizer": optimizer, "seed": seed,
            **dict(zip(THETA_NAMES, theta)),
+           "fitness": result["fitness"], "nis_weight": OBJECTIVE["nis_weight"],
            "rmse_h": result["rmse_h"], "rmse_v": result["rmse_v"], "rmse_3d": result["rmse_3d"],
            "mean_nis": result["mean_nis"], "nis_dof": nis_dof(data),
+           "nis_consistency": float(nis_consistency(result["mean_nis"], nis_dof(data))),
            "rmse_gps": rmse_gps, "delta_vs_gps": result["rmse_h"] - rmse_gps,
            # which filter behaviour produced the row (ekf.filter.OPTIONS)
            "gate_enabled": bool(OPTIONS["gate"]), "init_heading": bool(OPTIONS["init_heading"]),
+           "plausibility": bool(OPTIONS["plausibility"]),
            "n_gate_rejected": result["n_rejected"]}
     if rmse_baseline is not None:
         row["delta_vs_baseline"] = result["rmse_h"] - rmse_baseline
@@ -403,7 +432,7 @@ def run_summary(data, tracker, optimizer, seed, rmse_gps=None, rmse_baseline=Non
                 "t_objective_per_eval": (tracker.t_objective / tracker.n_objective_evals
                                          if tracker.n_objective_evals else np.nan),
                 "best_fitness_search": tracker.best_cost,
-                "search_vs_final_diff": result["rmse_h"] - tracker.best_cost})
+                "search_vs_final_diff": result["fitness"] - tracker.best_cost})
     return row, result
 
 

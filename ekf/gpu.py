@@ -86,7 +86,8 @@ class _Batch:
         self.G[:, 13:16, 9:12] = ev.I3
         self.failed = torch.zeros(B, dtype=torch.bool, device=dev)
         self.nis_sum, self.n_upd = z(B), z(B)
-        self.t_last, self.n_rej = z(B), z(B)        # gate: time of the last accepted fix, fixes rejected
+        self.t_last, self.n_rej = z(B), z(B)        # time of the last accepted fix, fixes rejected
+        self.p_last = z(B, 2)                       # plausibility rule: position at the last accepted fix
         self.pos_log = z(ev.n_imu, B, 3)
         self.s = torch.zeros(1, dtype=torch.long, device=dev)   # IMU step counter (k - 1)
         self.u = torch.zeros(1, dtype=torch.long, device=dev)   # GPS update counter
@@ -96,14 +97,16 @@ class _Batch:
 class GpuEvaluator:
     """Whole-flight fitness for a batch of candidates on one dataset.
 
-    evaluate(thetas) returns numpy arrays rmse_h (the fitness, PENALTY on failure),
+    evaluate(thetas) returns numpy arrays fitness (J, tuning.objective_value), rmse_h (PENALTY on failure),
     rmse_v, rmse_3d, mean_nis and ok, one value per candidate, as tuning.evaluate.
     """
 
     def __init__(self, data, device="cuda", use_graphs=True, x0=None):
         """x0 (optional) replaces init_state's initial state, e.g. when data is a resampled stream."""
+        from .filter import nis_dof
         from .tuning import PENALTY
         self.penalty = PENALTY
+        self.dof = nis_dof(data)
         self.device = torch.device(device)
         self.use_graphs = use_graphs and self.device.type == "cuda"
         dev, T = self.device, (lambda a: torch.as_tensor(np.asarray(a, dtype=float), dtype=DTYPE, device=dev))
@@ -136,6 +139,8 @@ class GpuEvaluator:
         self.gate = OPTIONS["gate"]                    # read when the evaluator is built
         self.gate_limit = float(chi2.isf(OPTIONS["gate_p"], self.m))
         self.gate_timeout = OPTIONS["gate_timeout_s"]
+        self.plausibility = OPTIONS["plausibility"]
+        self.max_speed, self.plausible_m = OPTIONS["max_speed_ms"], OPTIONS["plausible_m"]
         self.t_start = float(t_imu[0])
 
         x_init, P0 = init_state(data)
@@ -230,7 +235,8 @@ class GpuEvaluator:
         self._normalize(b)
 
     def _update(self, b):
-        """filterpy ExtendedKalmanFilter.update (Joseph form) with the chi-square gate, then normalize.
+        """filterpy ExtendedKalmanFilter.update (Joseph form) with the plausibility rule and the
+        chi-square gate, then normalize.
 
         A rejected fix leaves x and P untouched, exactly as run_ekf skips it. Everything is masked,
         never branched, so the step stays valid inside a CUDA graph.
@@ -249,13 +255,19 @@ class GpuEvaluator:
         nis = ((y.unsqueeze(1) @ SI) @ y.unsqueeze(2)).view(-1)
         b.failed |= info != 0
         alive = ~b.failed
-        if self.gate:
+        if self.gate or self.plausibility:
             t_now = self.zt.index_select(0, b.u)                     # 1
-            accept = (nis <= self.gate_limit) | ((t_now - b.t_last) > self.gate_timeout)
+            accept = torch.ones_like(alive)
+            if self.plausibility:
+                jump = torch.linalg.vector_norm(z[:, 0:2] - b.p_last, dim=1)
+                accept &= jump <= self.plausible_m + self.max_speed * (t_now - b.t_last)
+            if self.gate:
+                accept &= (nis <= self.gate_limit) | ((t_now - b.t_last) > self.gate_timeout)
             b.t_last.copy_(torch.where(accept, t_now, b.t_last))
             b.n_rej += (alive & ~accept).to(DTYPE)
             x_new = torch.where(accept.view(-1, 1), x_new, x)
             P_new = torch.where(accept.view(-1, 1, 1), P_new, P)
+            b.p_last.copy_(torch.where(accept.view(-1, 1), x_new[:, 0:2], b.p_last))
             counted = alive & accept
         else:
             counted = alive
@@ -293,6 +305,7 @@ class GpuEvaluator:
         b.nis_sum.zero_()
         b.n_upd.zero_()
         b.t_last.fill_(self.t_start)
+        b.p_last.copy_(self.x0[0:2].expand(b.B, -1))
         b.n_rej.zero_()
         b.pos_log.zero_()
         b.pos_log[0] = self.x0[0:3]
@@ -359,12 +372,14 @@ class GpuEvaluator:
                "rmse_3d": torch.where(ok, rmse_3d, torch.full_like(rmse_3d, float("nan"))),
                "mean_nis": b.nis_sum / b.n_upd, "ok": ok, "n_rejected": b.n_rej}
         out = {k: v.cpu().numpy() for k, v in out.items()}
+        from .tuning import objective_value
+        out["fitness"] = np.atleast_1d(objective_value(out["rmse_h"], out["mean_nis"], self.dof, out["ok"]))
         self.n_evaluated += B
         self.t_gpu += time.perf_counter() - t0
         return out
 
     def fitness(self, thetas):
-        return self.evaluate(thetas)["rmse_h"]
+        return self.evaluate(thetas)["fitness"]
 
 
 _EVALUATORS = {}
@@ -405,15 +420,14 @@ def compare_with_cpu(data, thetas, n_workers=1, device="cuda"):
     t_gpu = time.perf_counter() - t0
 
     table = pd.DataFrame(thetas, columns=THETA_NAMES)
-    for key in ("rmse_h", "rmse_v", "rmse_3d", "mean_nis", "ok"):
+    for key in ("fitness", "rmse_h", "rmse_v", "rmse_3d", "mean_nis", "ok"):
         table[f"cpu_{key}"] = cpu[key]
         table[f"gpu_{key}"] = gpu[key]
     both = table["cpu_ok"] & table["gpu_ok"]
-    for key in ("rmse_h", "rmse_v", "rmse_3d"):
+    for key in ("fitness", "rmse_h", "rmse_v", "rmse_3d"):
         table[f"diff_{key}"] = np.where(both, np.abs(table[f"gpu_{key}"] - table[f"cpu_{key}"]), 0.0)
     table["reldiff_mean_nis"] = np.where(
         both, np.abs(table["gpu_mean_nis"] - table["cpu_mean_nis"]) / np.abs(table["cpu_mean_nis"]), 0.0)
-    table["diff_fitness"] = np.abs(table["gpu_rmse_h"] - table["cpu_rmse_h"])
     # chaotic candidates are reported but not held to the tolerance; failed ones are checked by the ok flags
     table["stable"] = ~(table["cpu_mean_nis"] > NIS_UNSTABLE)
     st = table[table["stable"]]
@@ -434,7 +448,7 @@ def compare_with_cpu(data, thetas, n_workers=1, device="cuda"):
                "torch": torch.__version__}
     # TOL_RMSE in metres up to 1 m, relative above: 64 m GPS noise gives errors of tens of metres
     scaled = {k: float((st[f"diff_{k}"] / np.maximum(1.0, st[f"cpu_{k}"].abs())).max()) if len(st) else 0.0
-              for k in ("rmse_h", "rmse_v", "rmse_3d")}
+              for k in ("fitness", "rmse_h", "rmse_v", "rmse_3d")}
     summary["max_scaled_diff"] = max(scaled.values())
     summary["passed"] = bool(summary["ok_flags_agree"]
                              and summary["max_scaled_diff"] <= TOL_RMSE

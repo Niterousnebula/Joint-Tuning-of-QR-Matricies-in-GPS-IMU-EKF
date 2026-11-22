@@ -1,0 +1,103 @@
+{
+  "id": "inavwhu/playground00_outages_s0",
+  "label": "iNav-WHU playground00 (ADIS16465 IMU 200 Hz, F9P GNSS 1 Hz), raw GPS with 3 degraded sections of 76.2 m",
+  "source_files": [
+    "playground00_ADIS16465_IMU.txt",
+    "playground00_F9P_GNSS.pos",
+    "playground00_groundtruth.nav"
+  ],
+  "time_base": "GNSS seconds of week, shared by all files",
+  "imu_increment_dt_s": 0.005000000004656613,
+  "imu_frame": "x front, y right, z down (static az = -g)",
+  "gnss": "F9P single point positioning, 1 Hz, no velocity (gps ve/vn/vu are NaN); std_e/std_n/std_u are the receiver's reported sigmas in metres",
+  "gps_origin_lat_lon_alt": [
+    30.53082221428571,
+    114.34941315000002,
+    13.466392857142855
+  ],
+  "gps_origin_method": "mean of 28 fixes while the ground truth is still at its origin",
+  "gt_first_motion_t_source_s": 198897.04,
+  "gt_frame_conversion": "NED -> ENU: e=pos_e, n=pos_n, u=-pos_d, ve=vel_e, vn=vel_n, vu=-vel_d",
+  "gt_attitude": "roll, pitch, yaw not carried into the canonical format",
+  "t0_source_s": 198869.145107,
+  "imu_samples": 265330,
+  "imu_dropped_invalid": 0,
+  "imu_dropped_outside_kept_segment": 0,
+  "imu_duration_s": 1326.528381000011,
+  "imu_rate_hz": 199.99999981373549,
+  "imu_max_gap_s": 0.005020000011427328,
+  "units": {
+    "time": "s",
+    "accel": "m/s^2",
+    "gyro": "rad/s",
+    "position": "m (ENU)",
+    "velocity": "m/s (ENU)"
+  },
+  "frames": "IMU in the sensor/body frame as logged; GPS and GT in ENU",
+  "gps_samples": 1272,
+  "gps_dropped": 0,
+  "gps_start_s": 0.8548930000106338,
+  "gps_end_s": 1325.8548930000106,
+  "gt_decimation_step": 20,
+  "gt_samples": 13266,
+  "gt_dropped": 343935,
+  "gt_start_s": 0.004893000004813075,
+  "gt_end_s": 1326.5048930000048,
+  "start_specific_force_ms2": 9.791430701162158,
+  "ekf_ready": {
+    "ready": true,
+    "reasons": [],
+    "gps_channels": [
+      "e",
+      "n",
+      "u"
+    ]
+  },
+  "derived_from": "inavwhu/playground00",
+  "gps_sections": {
+    "seed": 0,
+    "length_m": 76.2,
+    "sections": [
+      {
+        "kind": "noise",
+        "sigma_h_m": 5.0,
+        "at": 0.25,
+        "t_start_s": 330.75038719009143,
+        "t_end_s": 391.38064687508546,
+        "duration_s": 60.63025968499403,
+        "start_m": 389.13740835613305,
+        "length_m": 76.2,
+        "n_fixes": 61,
+        "raw_gps_rmse_h_m": 0.27994543228971275,
+        "degraded_gps_rmse_h_m": 4.86697916766746
+      },
+      {
+        "kind": "noise",
+        "sigma_h_m": 15.0,
+        "at": 0.5,
+        "t_start_s": 648.7781796767364,
+        "t_end_s": 700.8810002982315,
+        "duration_s": 52.102820621495084,
+        "start_m": 816.3748167122661,
+        "length_m": 76.2,
+        "n_fixes": 53,
+        "raw_gps_rmse_h_m": 1.2551417872908945,
+        "degraded_gps_rmse_h_m": 17.18881603595735
+      },
+      {
+        "kind": "outage",
+        "at": 0.75,
+        "t_start_s": 949.9577648290103,
+        "t_end_s": 1003.8945311666563,
+        "duration_s": 53.93676633764596,
+        "start_m": 1243.6122250683993,
+        "length_m": 76.2,
+        "n_fixes": 54,
+        "raw_gps_rmse_h_m": 1.3522083619506866,
+        "degraded_gps_rmse_h_m": NaN
+      }
+    ],
+    "raw_gps_rmse_h_clean_m": 1.116553487300943,
+    "raw_gps_rmse_h_m": 3.0927741024510804
+  }
+}

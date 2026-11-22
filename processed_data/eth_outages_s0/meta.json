@@ -1,0 +1,103 @@
+{
+  "id": "eth_outages_s0",
+  "label": "ETH Zurich GPS-IMU flight, raw GPS with 3 degraded sections of 76.2 m",
+  "source_files": [
+    "RawAccel ETH",
+    "RawGyro ETH",
+    "OnboardGPS ETH",
+    "GroundTruth ETH"
+  ],
+  "accel_rows": 27048,
+  "gyro_rows": 27048,
+  "imu_rows_matched": 27048,
+  "gps_origin_lat_lon_alt": [
+    47.3843551,
+    8.5451786,
+    465.164
+  ],
+  "gps_origin_note": "ENU origin is the first GPS fix (already applied in the source files)",
+  "gt_velocity": "not provided",
+  "t0_source_s": 7.290907,
+  "imu_samples": 27048,
+  "imu_dropped_invalid": 0,
+  "imu_dropped_outside_kept_segment": 0,
+  "imu_duration_s": 2713.50375,
+  "imu_rate_hz": 9.999999999997726,
+  "imu_max_gap_s": 1.1000000000001364,
+  "units": {
+    "time": "s",
+    "accel": "m/s^2",
+    "gyro": "rad/s",
+    "position": "m (ENU)",
+    "velocity": "m/s (ENU)"
+  },
+  "frames": "IMU in the sensor/body frame as logged; GPS and GT in ENU",
+  "gps_samples": 13119,
+  "gps_dropped": 0,
+  "gps_start_s": -0.08394000000000013,
+  "gps_end_s": 2713.33478,
+  "gt_samples": 2689,
+  "gt_dropped": 0,
+  "gt_start_s": 6.518221999999429,
+  "gt_end_s": 2709.8859560870865,
+  "start_specific_force_ms2": 9.033627207171772,
+  "ekf_ready": {
+    "ready": true,
+    "reasons": [],
+    "gps_channels": [
+      "e",
+      "n",
+      "u",
+      "ve",
+      "vn",
+      "vu"
+    ]
+  },
+  "derived_from": "eth",
+  "gps_sections": {
+    "seed": 0,
+    "length_m": 76.2,
+    "sections": [
+      {
+        "kind": "noise",
+        "sigma_h_m": 5.0,
+        "at": 0.25,
+        "t_start_s": 752.4335360522944,
+        "t_end_s": 890.0209637746794,
+        "duration_s": 137.5874277223851,
+        "start_m": 428.91964761771675,
+        "length_m": 76.2,
+        "n_fixes": 689,
+        "raw_gps_rmse_h_m": 2.7979628476945306,
+        "degraded_gps_rmse_h_m": 5.613405399318952
+      },
+      {
+        "kind": "noise",
+        "sigma_h_m": 15.0,
+        "at": 0.5,
+        "t_start_s": 1576.0222791872513,
+        "t_end_s": 1693.7846927613896,
+        "duration_s": 117.76241357413824,
+        "start_m": 895.9392952354335,
+        "length_m": 76.2,
+        "n_fixes": 589,
+        "raw_gps_rmse_h_m": 3.175246249662339,
+        "degraded_gps_rmse_h_m": 15.173338740033078
+      },
+      {
+        "kind": "outage",
+        "at": 0.75,
+        "t_start_s": 2144.638173436247,
+        "t_end_s": 2226.814574045067,
+        "duration_s": 82.17640060881968,
+        "start_m": 1362.9589428531503,
+        "length_m": 76.2,
+        "n_fixes": 411,
+        "raw_gps_rmse_h_m": 1.5496206551292386,
+        "degraded_gps_rmse_h_m": NaN
+      }
+    ],
+    "raw_gps_rmse_h_clean_m": 3.6040150045985313,
+    "raw_gps_rmse_h_m": 4.611514165763274
+  }
+}

@@ -1,13 +1,13 @@
 """Maps of each run on OpenStreetMap: ground truth, the GPS fixes, the baseline EKF (THETA0) and
 the best tuned run of every optimizer.
 
-    python plot_maps.py                                   # every dataset of main.DATASETS
-    python plot_maps.py --datasets eth_gps2m_s0           # one dataset
+    python plot_maps.py                                   # every dataset of main.py's scenario
+    python plot_maps.py --root results/gps16m --datasets eth_gps16m_nov_s0
 
-Writes results/<dataset>/map.png (static, OSM tiles: one map per filter, baseline, GA, PSO, DE and GWO,
+Writes results/<scenario>/<dataset>/map.png (static, OSM tiles: one map per filter, baseline, GA, PSO, DE and GWO,
 each with the GPS fixes and the ground truth) and map.html (interactive, all tracks in one map:
 pan, zoom and toggle tracks; needs a browser with internet). The EKF tracks are rerun on the CPU
-reference with the THETA0 and best thetas from results/<dataset>/<OPT>/runs.csv. Map tiles come from
+reference with the THETA0 and best thetas from <root>/<dataset>/<OPT>/runs.csv. Map tiles come from
 tile.openstreetmap.org and are cached in .tile_cache/; without internet the PNG is drawn without them.
 """
 import argparse
@@ -31,7 +31,14 @@ from data_pipeline.geo import enu_to_latlon
 OPTIMIZERS = ["GA", "PSO", "DE", "GWO"]
 COLORS = {"truth": "#111111", "gps": "#7f7f7f", "baseline": "#555555",
           "GA": "#1f77b4", "PSO": "#ff7f0e", "DE": "#2ca02c", "GWO": "#d62728"}
+SECTION_COLORS = ["#e6ab02", "#e7298a", "#7570b3"]        # degraded GPS sections, in order
 TILE_CACHE = Path(".tile_cache")
+
+
+def section_label(sec):
+    """'5 m GPS noise', '15 m GPS noise' or 'GPS outage', with the section's length and duration."""
+    what = f"{sec['sigma_h_m']:g} m GPS noise" if sec["kind"] == "noise" else "GPS outage"
+    return f"{what} ({sec['length_m']:g} m, {sec['duration_s']:.0f} s)"
 MAX_POINTS = 5000            # per track, enough for a map
 
 
@@ -41,9 +48,10 @@ MAX_POINTS = 5000            # per track, enough for a map
 _data = None
 
 
-def _init(data):
+def _init(data, options):
     global _data
     _data = data
+    ekf.filter.OPTIONS.update(options)          # the parent's filter settings (spawned workers start fresh)
 
 
 def _track(theta):
@@ -54,17 +62,23 @@ def _track(theta):
     return x[::step, :2], r["rmse_h"]
 
 
-def tracks(dataset, root):
-    """[(name, label, ENU array, rmse)] for the baseline and the best seed of every optimizer."""
+def best_runs(dataset, root):
+    """The dataset and [(name, label, theta)] for the baseline and the best seed (lowest objective) of every optimizer."""
     data = ekf.load_data(dataset)
     runs = [("baseline", "EKF, THETA0 (baseline)", data["theta0"])]
     for name in OPTIMIZERS:
-        path = root / dataset / name / "runs.csv"
+        path = Path(root) / dataset / name / "runs.csv"
         if path.exists():
             r = pd.read_csv(path)
-            b = r.loc[r["rmse_h"].idxmin()]
+            b = r.loc[r["fitness" if "fitness" in r and r.get("nis_weight", pd.Series([0])).iloc[0] else "rmse_h"].idxmin()]
             runs.append((name, f"EKF, {name} best (seed {int(b['seed'])})", b[ekf.THETA_NAMES].to_numpy(dtype=float)))
-    with Pool(len(runs), initializer=_init, initargs=(data,)) as pool:
+    return data, runs
+
+
+def tracks(dataset, root):
+    """[(name, label, ENU array, rmse)] for the baseline and the best seed of every optimizer."""
+    data, runs = best_runs(dataset, root)
+    with Pool(len(runs), initializer=_init, initargs=(data, dict(ekf.filter.OPTIONS))) as pool:
         out = pool.map(_track, [t for _, _, t in runs])
     return data, [(n, lab, xy, rm) for (n, lab, _), (xy, rm) in zip(runs, out)]
 
@@ -124,6 +138,7 @@ def draw(dataset, root):
     truth = ll(data["p_true"][:, :2])
     gps = ll(data["p_gps"][:, :2])
     gps_rmse = ekf.gps_rmse(data)
+    sections = meta.get("gps_sections", {}).get("sections", [])
     out = root / dataset
 
     # static PNG: one map per filter (baseline, GA, PSO, DE, GWO), each with the GPS fixes and the ground
@@ -144,6 +159,11 @@ def draw(dataset, root):
         has_tiles = basemap(ax, *box)
         ax.plot(gx, gy, ".", ms=2, color=COLORS["gps"], alpha=0.5, label=f"GPS fixes ({gps_rmse:.2f} m)", zorder=2)
         ax.plot(tx, ty, color=COLORS["truth"], lw=2.2, label="ground truth", zorder=5)
+        for k, sec in enumerate(sections):
+            inside = (data["t_true"] >= sec["t_start_s"]) & (data["t_true"] <= sec["t_end_s"])
+            sx, sy = _merc(*ll(data["p_true"][inside, :2]))
+            ax.plot(sx, sy, color=SECTION_COLORS[k % len(SECTION_COLORS)], lw=7, alpha=0.45,
+                    solid_capstyle="butt", label=section_label(sec), zorder=3)
         mx, my = _merc(*ll(xy))
         ax.plot(mx, my, color=COLORS[name], lw=0.9 if gps_rmse > 10 else 1.5, ls="--" if name == "baseline" else "-",
                 label=f"EKF ({rm:.2f} m)", zorder=4)
@@ -192,6 +212,6 @@ if __name__ == "__main__":
     import main as runner
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--datasets", nargs="+", default=runner.DATASETS)
-    p.add_argument("--root", default="results")
+    p.add_argument("--root", default=str(runner.results_root(runner.SCENARIO)))
     a = p.parse_args()
     main(a.datasets, a.root)

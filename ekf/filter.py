@@ -38,6 +38,16 @@ OPTIONS = {
     "gate": False,
     "gate_p": 1e-3,
     "gate_timeout_s": 5.0,
+    # Plausibility rule, checked before every GPS update and independent of the filter's covariance: a fix
+    # farther from the filter's position at the last accepted fix than the platform could have travelled
+    # since (max_speed_ms x elapsed time) plus plausible_m (normal GPS error and the filter's own error)
+    # is impossible, so it is discarded and the filter carries on with its IMU prediction. The allowance
+    # grows with the time since the last accepted fix, so a run of rejections ends by itself (no lockout,
+    # even after an outage). Both datasets are walking-speed platforms (top speed 2.0-5.0 m/s in the
+    # ground truth); ETH's raw fixes are off by up to 24.6 m, iNav-WHU's by up to 2.1 m.
+    "plausibility": True,
+    "max_speed_ms": 6.0,
+    "plausible_m": 25.0,
     # Initial heading from the first GNSS motion, for datasets with no GPS velocity (see init_state).
     "init_heading": True,
 }
@@ -352,7 +362,8 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
 
     Returns x_log (one row per IMU sample, STATE_COLUMNS order), innovation_log
     (one row per accepted GPS update, INNOVATION_COLUMNS order), mean_nis, ok (False if the
-    run diverged or a matrix inversion failed) and n_rejected, the number of fixes the gate skipped.
+    run diverged or a matrix inversion failed) and n_rejected, the number of fixes discarded by the
+    plausibility rule or the gate.
     """
     if x0 is None or P0 is None:
         x0, P0 = init_state(data)
@@ -367,7 +378,10 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
     gate = OPTIONS["gate"]
     gate_limit = chi2.isf(OPTIONS["gate_p"], len(channels))
     gate_timeout = OPTIONS["gate_timeout_s"]
+    plausibility = OPTIONS["plausibility"]
+    max_speed, plausible_m = OPTIONS["max_speed_ms"], OPTIONS["plausible_m"]
     t_accepted, n_rejected = t_imu[0], 0
+    p_accepted = kf.x[0:2].copy()       # filter position (east, north) at the last accepted fix
 
     x_log = np.zeros((n_imu, N_STATES))
     x_log[0] = kf.x
@@ -385,12 +399,18 @@ def run_ekf(data, Q_c, R, x0=None, P0=None, t_end=None):
         try:
             kf.step_predict(accel[k - 1], gyro[k - 1], t_imu[k] - t_imu[k - 1])
             while j < n_gps and t_gps[j] <= t_imu[k]:
+                if plausibility and (np.hypot(z_gps[j, 0] - p_accepted[0], z_gps[j, 1] - p_accepted[1])
+                                     > plausible_m + max_speed * (t_gps[j] - t_accepted)):
+                    n_rejected += 1             # impossible jump: keep the IMU prediction
+                    j += 1
+                    continue
                 if gate and t_gps[j] - t_accepted <= gate_timeout and kf.predicted_nis(z_gps[j]) > gate_limit:
                     n_rejected += 1
                     j += 1
                     continue
                 t_accepted = t_gps[j]
                 nis = kf.step_update(z_gps[j])
+                p_accepted = kf.x[0:2].copy()
                 y_full, s_full = np.full(N_MEAS, np.nan), np.full(N_MEAS, np.nan)   # NaN = channel not used
                 y_full[channels], s_full[channels] = kf.y, np.diag(kf.S)
                 innovation_log[n_updates] = np.r_[t_gps[j], y_full, s_full, nis]

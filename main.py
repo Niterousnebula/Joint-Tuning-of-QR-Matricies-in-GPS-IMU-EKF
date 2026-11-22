@@ -3,17 +3,26 @@ tables and graphs.
 
     python main.py                 # the full benchmark (GPU), resumable
     python main.py --plan          # prepare the datasets, print the plan and a time estimate
-    python main.py --plots-only    # rebuild tables and figures from results/
-    python main.py --smoke         # tiny budget into results_smoke/, checks the pipeline
+    python main.py --plots-only    # rebuild tables and figures from results/<scenario>/
+    python main.py --smoke         # tiny budget into results_smoke/<scenario>/, checks the pipeline
+    python main.py --scenario gps16m   # the saved first run (any of the commands above)
 
-Datasets: eth, inavwhu/playground00 and inavwhu/street00, each with white GPS noise added (NOISE
-below). Preparing them processes raw_data/ if needed and writes the noisy copies
+Scenarios (SCENARIOS below), each on eth, inavwhu/playground00 and inavwhu/street00, results in
+results/<scenario>/:
+    outages   (default) the raw GPS, except three sections of 250 ft (76.2 m) of travel at 25, 50 and
+              75 % of the path: about 5 m added error, about 15 m, and a complete outage. Also writes
+              sections.md/png (plot_sections.py): how each filter behaves in those sections.
+    gps16m    the first run, kept in results/gps16m/: 16 m white GPS noise everywhere, position-only.
+Objective (NIS_WEIGHT): outages scores accuracy and consistency together, J = RMSE_h * (1 + |log10(mean
+NIS / dof)|) (ekf.tuning.objective_value); gps16m keeps run 1's RMSE_h alone. GPS plausibility rule
+(PLAUSIBILITY): outages discards any fix the platform could not have reached (ekf.filter.OPTIONS).
+Preparing the datasets processes raw_data/ if needed and writes the degraded copies
 (make_noisy_gps.py); both are skipped when the files exist. Optimizers, one after another so the GPU
 serves one at a time: GA, PSO, DE, GWO, each with its own config (population 100, 1,000
 evaluations per seed, seeds 1-5, BACKEND = "gpu"). Per dataset:
 
     1. validation   the first candidates GA scores for seed 1 are scored again by the filterpy
-                    reference on the CPU; the run stops if any difference exceeds TOL_RMSE
+                    reference on the CPU; the run stops if any difference (J, RMSE, NIS) exceeds the tolerance
     2. baseline     THETA0 through the same fitness
     3. GA, PSO, DE, GWO: every seed, then the accounting check (n_evals = n_objective_evals =
                     convergence rows = MAX_EVALS) and the mean NIS of every incumbent on the
@@ -26,7 +35,7 @@ dataset): convergence, and accuracy against convergence speed; and an OpenStreet
 
 Resumable: a seed whose runs.csv row, convergence curve and incumbents file are complete is
 skipped, so the command can be stopped and started again. Every session is appended to
-results/main_manifest.json and everything printed goes to results/main.log.
+results/<scenario>/main_manifest.json and everything printed goes to results/<scenario>/main.log.
 """
 import argparse
 import importlib
@@ -45,15 +54,28 @@ import pandas as pd
 import ekf
 import plot_maps
 import plot_response
-from make_noisy_gps import derived_id, make
+import plot_sections
+from make_noisy_gps import SECTION_M, SECTIONS, derived_id, make, make_sections, sections_id
 
-# White GPS position noise per dataset (m, horizontal; vertical 1.5x, seed 0): 16 m, a raw GPS error of
-# about 18.5 m (a poor receiver). Every dataset is position-only: iNav-WHU's F9P has no velocity, and ETH's
-# velocity is dropped (with it, the clean velocity carries the filter and tuning gains < 1 %).
-# (README, "GPS noise").
-NOISE = {"eth": 16.0, "inavwhu/playground00": 16.0, "inavwhu/street00": 16.0}
+SOURCES = ["eth", "inavwhu/playground00", "inavwhu/street00"]
+# Scenario gps16m: white GPS position noise per dataset (m, horizontal; vertical 1.5x, seed 0): 16 m, a raw
+# GPS error of about 18.5 m (a poor receiver). Every dataset is position-only: iNav-WHU's F9P has no
+# velocity, and ETH's velocity is dropped (with it, the clean velocity carries the filter and tuning
+# gains < 1 %). (README, "GPS noise").
+NOISE = {source: 16.0 for source in SOURCES}
 DROP_VELOCITY = {"eth"}
-DATASETS = [derived_id(source, sigma, 0.0, 60.0, 0, source in DROP_VELOCITY) for source, sigma in NOISE.items()]
+# Scenario outages: raw GPS with the make_noisy_gps.SECTIONS degraded (5 m, 15 m, outage), seed 0.
+SCENARIOS = {
+    "outages": [sections_id(source) for source in SOURCES],
+    "gps16m": [derived_id(source, NOISE[source], 0.0, 60.0, 0, source in DROP_VELOCITY) for source in SOURCES],
+}
+SCENARIO = "outages"
+DATASETS = SCENARIOS[SCENARIO]
+# Weight of NIS consistency in the objective per scenario (ekf.tuning.OBJECTIVE): 0 = RMSE_h alone.
+NIS_WEIGHT = {"outages": 1.0, "gps16m": 0.0}
+# GPS plausibility rule per scenario (ekf.filter.OPTIONS["plausibility"]: discard a fix the platform could
+# not have reached since the last accepted one). Off for gps16m, which ran without it.
+PLAUSIBILITY = {"outages": True, "gps16m": False}
 OPTIMIZERS = ["GA", "PSO", "DE", "GWO"]
 LIVE_LOGS = {"PSO": "pso_log.csv", "DE": "de_log.csv", "GWO": "gwo_log.csv"}   # GA keeps no live log
 SMOKE = {"population_size": 4, "max_evals": 8, "seeds": (1,), "validate": 4}
@@ -116,19 +138,33 @@ def check_configs():
         raise SystemExit("main.py needs BACKEND = 'gpu' in every config")
 
 
+def results_root(scenario, smoke=False):
+    return Path("results_smoke" if smoke else "results") / scenario
+
+
+def _meta(dataset):
+    path = ekf.PROCESSED_DIR / dataset / "meta.json"
+    return json.loads(path.read_text()) if path.is_file() else {}
+
+
 def prepare(datasets):
-    """Make sure every dataset is processed: raw_data/ -> processed_data/, then the noisy copy."""
-    for source, sigma in NOISE.items():
+    """Make sure every dataset is processed: raw_data/ -> processed_data/, then the degraded copy.
+
+    A copy is written again when its recorded settings differ from the ones here (the folder name does
+    not show them all). Making a copy processes its source from raw_data/ first if needed."""
+    for source in SOURCES:
         drop = source in DROP_VELOCITY
-        folder = ekf.PROCESSED_DIR / derived_id(source, sigma, 0.0, 60.0, 0, drop)
-        if folder.name not in [Path(d).name for d in datasets]:
-            continue
-        meta = folder / "meta.json"
-        noise = json.loads(meta.read_text()).get("gps_noise", {}) if meta.is_file() else {}
-        # the folder name does not show velocity or Gauss-Markov noise, so check the recorded settings
-        if (noise.get("sigma_h_m"), noise.get("sigma_vel_ms"), noise.get("gm_sigma_m"), noise.get("seed"),
-                noise.get("velocity_dropped", False)) != (sigma, 0.0, 0.0, 0, drop):
-            make(source, sigma, drop_vel=drop)          # processes the source from raw_data/ first if needed
+        noisy = derived_id(source, NOISE[source], 0.0, 60.0, 0, drop)
+        if noisy in datasets:
+            noise = _meta(noisy).get("gps_noise", {})
+            if (noise.get("sigma_h_m"), noise.get("sigma_vel_ms"), noise.get("gm_sigma_m"), noise.get("seed"),
+                    noise.get("velocity_dropped", False)) != (NOISE[source], 0.0, 0.0, 0, drop):
+                make(source, NOISE[source], drop_vel=drop)
+        if sections_id(source) in datasets:
+            got = _meta(sections_id(source)).get("gps_sections", {})
+            have = [{k: s.get(k) for k in want} for s, want in zip(got.get("sections", []), SECTIONS)]
+            if (got.get("length_m"), got.get("seed"), have) != (SECTION_M, 0, list(SECTIONS)):
+                make_sections(source)
     for ds in datasets:
         if not (ekf.PROCESSED_DIR / ds / "meta.json").is_file():
             ekf.load_data(ds)                           # a clean dataset: processed from raw_data/
@@ -179,7 +215,7 @@ def validate(data, out, population, n_candidates, n_workers):
     if summary_path.exists():
         summary = json.loads(summary_path.read_text())
         if summary.get("passed"):
-            say(f"  validation: already passed (max difference {summary['max_diff_fitness']:.2e} m)")
+            say(f"  validation: already passed (max difference of J {summary['max_diff_fitness']:.2e})")
             return summary
     out.mkdir(parents=True, exist_ok=True)
     n = min(n_candidates, population)
@@ -190,8 +226,9 @@ def validate(data, out, population, n_candidates, n_workers):
     thetas = hist[ekf.THETA_NAMES].to_numpy()
     table, summary = compare_with_cpu(data, thetas, n_workers=n_workers)
     table.insert(0, "tracker_fitness", hist["fitness"].to_numpy())
-    table["diff_tracker_vs_cpu"] = np.abs(table["tracker_fitness"] - table["cpu_rmse_h"])
-    summary["max_diff_tracker_vs_cpu"] = float(table.loc[table["stable"], "diff_tracker_vs_cpu"].max())
+    table["diff_tracker_vs_cpu"] = np.abs(table["tracker_fitness"] - table["cpu_fitness"])
+    scaled = table["diff_tracker_vs_cpu"] / np.maximum(1.0, table["cpu_fitness"].abs())
+    summary["max_diff_tracker_vs_cpu"] = float(scaled[table["stable"]].max())
     summary["passed"] = bool(summary["passed"] and summary["max_diff_tracker_vs_cpu"] <= TOL_RMSE)
     summary.update(optimizer="GA", seed=1, generation=1)
     table.to_csv(out / "validation_table.csv", index=False)
@@ -200,8 +237,8 @@ def validate(data, out, population, n_candidates, n_workers):
         say(f"  validation: {summary['n_unstable_excluded']} numerically chaotic candidate(s) (mean NIS > "
             f"{summary['nis_unstable']:g}) left out of the tolerance check; their |GPU - CPU| is up to "
             f"{summary['max_diff_fitness_unstable']:.1f} m, as rounding decides them on any backend")
-    say(f"  validation: max |GPU - CPU| {summary['max_diff_fitness']:.2e} m -> "
-        f"{'PASSED' if summary['passed'] else 'FAILED'} (tolerance {TOL_RMSE:g} m)")
+    say(f"  validation: max |GPU - CPU| of J {summary['max_diff_fitness']:.2e} -> "
+        f"{'PASSED' if summary['passed'] else 'FAILED'} (tolerance {TOL_RMSE:g}, relative above 1)")
     return summary
 
 
@@ -212,11 +249,13 @@ def baseline(data, out):
         return {"rmse_h": float(r["rmse_h"]), "rmse_gps": float(r["rmse_gps"])}
     rmse_gps = ekf.gps_rmse(data)
     with ekf.make_cost_fn(data, max_evals=1) as tracker:
-        rmse_base = tracker(ekf.THETA0)
-        row, _ = ekf.run_summary(data, tracker, "baseline", 0, rmse_gps=rmse_gps,
-                                 rmse_baseline=rmse_base, population_size=1)
+        tracker(ekf.THETA0)
+        row, _ = ekf.run_summary(data, tracker, "baseline", 0, rmse_gps=rmse_gps, population_size=1)
+        rmse_base = row["rmse_h"]
+        row.update(delta_vs_baseline=0.0, improvement_vs_baseline_pct=0.0)
         ekf.save_run(out, row, tracker)
-    say(f"  baseline: THETA0 RMSE_h {rmse_base:.4f} m, raw GPS {rmse_gps:.4f} m, mean NIS {row['mean_nis']:.2f}")
+    say(f"  baseline: THETA0 J {row['fitness']:.4f}, RMSE_h {rmse_base:.4f} m, mean NIS {row['mean_nis']:.2f} "
+        f"(consistent: {row['nis_dof']}), raw GPS {rmse_gps:.4f} m")
     return {"rmse_h": rmse_base, "rmse_gps": rmse_gps}
 
 
@@ -256,8 +295,9 @@ def run_optimizer(name, data, out, smoke):
         for s, table in response.incumbent_nis(data, curves).items():
             table.to_csv(out / f"incumbents_seed{s}.csv", index=False)
     t_inc = time.perf_counter() - t1
-    best = runs.loc[runs["rmse_h"].idxmin()]
-    say(f"  {name} done: best seed {int(best['seed'])} RMSE_h {best['rmse_h']:.4f} m; "
+    best = runs.loc[runs["fitness"].idxmin()]
+    say(f"  {name} done: best seed {int(best['seed'])} J {best['fitness']:.4f}, RMSE_h {best['rmse_h']:.4f} m, "
+        f"mean NIS {best['mean_nis']:.2f}; "
         f"search {t_search / 60:.1f} min, incumbents {t_inc / 60:.1f} min")
     return {"seeds_run": to_run, "search_s": t_search, "incumbents_s": t_inc, "checks": checks}
 
@@ -280,7 +320,9 @@ def plan(datasets, smoke):
 # ---------------------------------------------------------------------------
 def main():
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    p.add_argument("--datasets", nargs="+", default=DATASETS)
+    p.add_argument("--scenario", default=SCENARIO, choices=list(SCENARIOS),
+                   help=f"which datasets and results/<scenario>/ (default {SCENARIO})")
+    p.add_argument("--datasets", nargs="+", help="default: the scenario's datasets")
     p.add_argument("--optimizers", nargs="+", default=OPTIMIZERS, choices=OPTIMIZERS)
     p.add_argument("--plan", action="store_true", help="print the plan and a time estimate, run nothing")
     p.add_argument("--plots-only", action="store_true", help="only rebuild tables and figures from the results")
@@ -290,6 +332,9 @@ def main():
     p.add_argument("--validate-workers", type=int, default=max(1, min(12, (os.cpu_count() or 2) - 2)))
     p.add_argument("--allow-any-branch", action="store_true")
     a = p.parse_args()
+    a.datasets = a.datasets or SCENARIOS[a.scenario]
+    ekf.tuning.OBJECTIVE["nis_weight"] = NIS_WEIGHT[a.scenario]
+    ekf.filter.OPTIONS["plausibility"] = PLAUSIBILITY[a.scenario]
 
     if not a.smoke:
         check_configs()
@@ -298,10 +343,11 @@ def main():
     if a.plan:
         plan(a.datasets, a.smoke)
         return
-    root = Path("results_smoke" if a.smoke else "results")
+    root = results_root(a.scenario, a.smoke)
     if a.plots_only:
         plot_response.build_all(root, a.datasets, a.optimizers)
         plot_maps.main(a.datasets, root)
+        plot_sections.main(a.datasets, root)
         return
 
     branch = git("rev-parse", "--abbrev-ref", "HEAD")
@@ -313,7 +359,7 @@ def main():
     if not torch.cuda.is_available():
         raise SystemExit("No CUDA GPU visible to PyTorch; main.py uses the GPU backend.")
 
-    root.mkdir(exist_ok=True)
+    root.mkdir(parents=True, exist_ok=True)
     lock = root / ".main.lock"
     try:
         fd = os.open(lock, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -323,14 +369,14 @@ def main():
     os.close(fd)
 
     sys.stdout = Tee(root / "main.log")
-    session = {"started": datetime.now().isoformat(timespec="seconds"), "smoke": a.smoke,
+    session = {"started": datetime.now().isoformat(timespec="seconds"), "scenario": a.scenario, "smoke": a.smoke,
                "datasets": a.datasets, "optimizers": a.optimizers,
                "git": {"branch": branch, "commit": git("rev-parse", "HEAD"),
                        "dirty": bool(git("status", "--porcelain", "--untracked-files=no"))},
                "environment": {"python": platform.python_version(), "numpy": np.__version__,
                                "torch": torch.__version__, "cuda": torch.version.cuda,
                                "gpu": torch.cuda.get_device_name(0)},
-               "filter_options": dict(ekf.filter.OPTIONS),
+               "filter_options": dict(ekf.filter.OPTIONS), "objective": dict(ekf.tuning.OBJECTIVE),
                "configs": {o: {k: getattr(config(o), k) for k in dir(config(o)) if k.isupper()} for o in a.optimizers},
                "budget_override": SMOKE if a.smoke else None, "datasets_done": {}}
     manifest_path = root / "main_manifest.json"
@@ -343,7 +389,7 @@ def main():
     save_manifest()
     t_all = time.perf_counter()
     try:
-        say(f"\n######## main.py {session['started']} | {', '.join(a.datasets)} | {', '.join(a.optimizers)} | "
+        say(f"\n######## main.py {session['started']} | {a.scenario}: {', '.join(a.datasets)} | {', '.join(a.optimizers)} | "
             f"GPU {session['environment']['gpu']} ########")
         for ds in a.datasets:
             t_ds = time.perf_counter()
@@ -369,6 +415,7 @@ def main():
             say(f"  {ds} finished in {info['wall_clock_s'] / 3600:.2f} h")
         plot_response.summary(root, a.datasets, a.optimizers)
         plot_maps.main(a.datasets, root)
+        plot_sections.main(a.datasets, root)
         session["finished"] = datetime.now().isoformat(timespec="seconds")
         session["wall_clock_s"] = time.perf_counter() - t_all
         save_manifest()
