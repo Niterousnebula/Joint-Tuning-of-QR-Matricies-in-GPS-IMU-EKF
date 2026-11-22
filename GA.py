@@ -158,7 +158,7 @@ def run_experiment(max_evals=None, seeds=None, out_dir=None,
 
     # Reference values are computed once per experiment, outside each GA budget.
     print("Computing baseline references...")
-    rmse_baseline = ekf.fitness(data, ekf.THETA0)
+    rmse_baseline = ekf.evaluate(data, ekf.THETA0)["rmse_h"]
     rmse_gps = ekf.gps_rmse(data)
     print(f"Baseline EKF (THETA0): {rmse_baseline:.4f} m")
     print(f"Raw GPS:               {rmse_gps:.4f} m")
