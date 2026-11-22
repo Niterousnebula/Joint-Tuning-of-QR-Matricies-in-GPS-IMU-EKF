@@ -1,6 +1,6 @@
 Dataset `eth_outages_s0`. Raw GPS RMSE_h 4.612 m.
 
-| Optimizer | Runs | Objective J | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
+| Optimizer | Runs | Optimizer score | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 6) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | baseline | 1 | 835.673 | 609.294 | 0.000 | 604.683 | 2.550 | 0.372 | 1 | 1 | 1 | 5.313 | 5.313 |
 | GA | 5 | 29.383 ± 6.498 | 25.441 ± 6.939 | -583.854 ± 6.939 | 20.829 ± 6.939 | 9.454 ± 4.821 | 0.175 ± 0.195 | 491 ± 366 | 720 ± 404 | 1,000 | 106.187 ± 0.109 | 0.106 ± 0.000 |

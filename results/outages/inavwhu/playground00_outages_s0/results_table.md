@@ -1,6 +1,6 @@
 Dataset `inavwhu/playground00_outages_s0`. Raw GPS RMSE_h 3.093 m.
 
-| Optimizer | Runs | Objective J | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 3) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
+| Optimizer | Runs | Optimizer score | Whole-flight RMSE_h (m) | vs baseline EKF (m) | vs raw GPS (m) | Mean NIS (expect 3) | abs(log10(NIS / dof)) | Evals to 99 % of improvement | Evals to best | N_eval | T_total (s) | T_objective per eval (s) |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | baseline | 1 | 11.601 | 6.582 | 0.000 | 3.489 | 17.366 | 0.763 | 1 | 1 | 1 | 25.759 | 25.759 |
 | GA | 5 | 1.853 ± 0.011 | 1.836 ± 0.029 | -4.746 ± 0.029 | -1.257 ± 0.029 | 3.046 ± 0.109 | 0.010 ± 0.013 | 366 ± 159 | 887 ± 87 | 1,000 | 732.459 ± 0.068 | 0.732 ± 0.000 |

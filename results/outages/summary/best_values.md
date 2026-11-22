@@ -1,4 +1,4 @@
-| Dataset | Optimizer (seed) | J | RMSE_h (m) | vs GPS (m) | NIS | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` |
+| Dataset | Optimizer (seed) | Optimizer score | RMSE_h (m) | vs GPS (m) | NIS | `log_q_acc` | `log_q_gyro` | `log_q_ba` | `log_q_bg` | `log_r_xy` | `log_r_z` | `log_r_vel` |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | eth_outages_s0 | GA (5) | 19.700 | 19.598 | +14.987 | 5.93 | -0.22 | -0.30 | -8.00 | -6.16 | 0.77 | 0.49 | 0.52 |
 | eth_outages_s0 | PSO (2) | 22.296 | 16.491 | +11.880 | 13.49 | -0.27 | -1.92 | -2.23 | -6.93 | 0.72 | 0.13 | -0.36 |

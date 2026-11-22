@@ -1,6 +1,6 @@
 Mean ± std over seeds.
 
-| Dataset | Method | Runs | J | RMSE_h (m) | vs baseline (m) | vs raw GPS (m) | Mean NIS (dof) | Evals to 99 % | T_total (s) |
+| Dataset | Method | Runs | Optimizer score | RMSE_h (m) | vs baseline (m) | vs raw GPS (m) | Mean NIS (dof) | Evals to 99 % | T_total (s) |
 |---|---|---:|---:|---:|---:|---:|---:|---:|---:|
 | eth_outages_s0 | baseline | 1 | 835.673 | 609.294 | 0.000 | 604.683 | 2.550 (6) | 1 | 5.313 |
 | eth_outages_s0 | GA | 5 | 29.383 ± 6.498 | 25.441 ± 6.939 | -583.854 ± 6.939 | 20.829 ± 6.939 | 9.454 ± 4.821 (6) | 491 ± 366 | 106.187 ± 0.109 |
