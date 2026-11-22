@@ -1,0 +1,831 @@
+{
+  "sessions": [
+    {
+      "started": "2026-11-22T01:05:39",
+      "scenario": "outages",
+      "smoke": false,
+      "datasets": [
+        "eth_outages_s0",
+        "inavwhu/playground00_outages_s0",
+        "inavwhu/street00_outages_s0"
+      ],
+      "optimizers": [
+        "GA",
+        "PSO",
+        "DE",
+        "GWO"
+      ],
+      "git": {
+        "branch": "main",
+        "commit": "459c8ee6919e31a56c463c1f859bc20f1b65ee55",
+        "dirty": true
+      },
+      "environment": {
+        "python": "3.12.10",
+        "numpy": "2.5.4",
+        "torch": "2.14.1+cu126",
+        "cuda": "12.6",
+        "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU"
+      },
+      "filter_options": {
+        "gate": false,
+        "gate_p": 0.001,
+        "gate_timeout_s": 5.0,
+        "plausibility": true,
+        "max_speed_ms": 6.0,
+        "plausible_m": 25.0,
+        "init_heading": true
+      },
+      "objective": {
+        "nis_weight": 1.0
+      },
+      "configs": {
+        "GA": {
+          "BACKEND": "gpu",
+          "BLX_ALPHA": 0.5,
+          "CROSSOVER_PROBABILITY": 0.9,
+          "ELITE_COUNT": 2,
+          "MAX_EVALS": 1000,
+          "MUTATION_PROBABILITY": 0.2,
+          "MUTATION_SIGMA_FRACTION": 0.1,
+          "N_WORKERS": 1,
+          "OUTPUT_DIR": "results/GA",
+          "POPULATION_SIZE": 100,
+          "RANDOM_SEED": 0,
+          "SEEDS": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "TOURNAMENT_SIZE": 3
+        },
+        "PSO": {
+          "BACKEND": "gpu",
+          "COGNITIVE": 1.49445,
+          "INERTIA_END": 0.4,
+          "INERTIA_START": 0.9,
+          "LOG_FILE": "pso_log.csv",
+          "MAX_EVALS": 1000,
+          "N_WORKERS": 1,
+          "OUTPUT_DIR": "results/PSO",
+          "RANDOM_SEED": 0,
+          "SEEDS": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ],
+          "SOCIAL": 1.49445,
+          "SWARM_SIZE": 100,
+          "VELOCITY_CLAMP_FRACTION": 0.2
+        },
+        "DE": {
+          "BACKEND": "gpu",
+          "CROSSOVER_RATE": 0.9,
+          "DIFFERENTIAL_WEIGHT": 0.7,
+          "MAX_EVALS": 1000,
+          "N_WORKERS": 1,
+          "OUTPUT_DIR": "results/DE",
+          "POPULATION_SIZE": 100,
+          "SEEDS": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        },
+        "GWO": {
+          "BACKEND": "gpu",
+          "MAX_EVALS": 1000,
+          "N_WORKERS": 1,
+          "OUTPUT_DIR": "results/GWO",
+          "POPULATION_SIZE": 100,
+          "SEEDS": [
+            1,
+            2,
+            3,
+            4,
+            5
+          ]
+        }
+      },
+      "budget_override": null,
+      "datasets_done": {
+        "eth_outages_s0": {
+          "theta0": {
+            "log_q_acc": 0.2,
+            "log_q_gyro": -3.0,
+            "log_q_ba": -5.0,
+            "log_q_bg": -8.0,
+            "log_r_xy": 1.0,
+            "log_r_z": 1.5,
+            "log_r_vel": 0.0
+          },
+          "validation": {
+            "n_candidates": 24,
+            "n_failed_cpu": 0,
+            "n_unstable_excluded": 0,
+            "nis_unstable": 1000.0,
+            "max_diff_fitness_unstable": 0.0,
+            "ok_flags_agree": true,
+            "max_diff_fitness": 3.055970410059672e-08,
+            "max_diff_rmse_h": 1.7059505807992537e-08,
+            "max_diff_rmse_v": 1.262839077753597e-08,
+            "max_diff_rmse_3d": 2.0915422282996587e-08,
+            "max_reldiff_mean_nis": 1.5502897424721414e-11,
+            "tol_rmse": 1e-06,
+            "tol_nis_rel": 1e-06,
+            "t_cpu": 33.82131709999885,
+            "t_gpu": 6.7766649999994115,
+            "cpu_workers": 12,
+            "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "torch": "2.14.1+cu126",
+            "max_scaled_diff": 2.6374411077157467e-11,
+            "passed": true,
+            "max_diff_tracker_vs_cpu": 1.7968605491156282e-11,
+            "optimizer": "GA",
+            "seed": 1,
+            "generation": 1
+          },
+          "baseline": {
+            "rmse_h": 609.2944469651437,
+            "rmse_gps": 4.611514165763274
+          },
+          "optimizers": {
+            "GA": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 562.6187131000006,
+              "incumbents_s": 9.032258999999613,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "PSO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 563.2657516999989,
+              "incumbents_s": 7.994693100001314,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "DE": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 561.9975120000017,
+              "incumbents_s": 7.9758615999999165,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "GWO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 561.7993064000002,
+              "incumbents_s": 9.139751700000488,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            }
+          },
+          "wall_clock_s": 2350.3685246999994
+        },
+        "inavwhu/playground00_outages_s0": {
+          "theta0": {
+            "log_q_acc": -5.398056690399654,
+            "log_q_gyro": -8.320327044689664,
+            "log_q_ba": -5.0,
+            "log_q_bg": -8.0,
+            "log_r_xy": -0.21857815945138093,
+            "log_r_z": 0.3009621123848341,
+            "log_r_vel": 0.0
+          },
+          "validation": {
+            "n_candidates": 24,
+            "n_failed_cpu": 0,
+            "n_unstable_excluded": 0,
+            "nis_unstable": 1000.0,
+            "max_diff_fitness_unstable": 0.0,
+            "ok_flags_agree": true,
+            "max_diff_fitness": 8.845122607681333e-07,
+            "max_diff_rmse_h": 3.1586610305112117e-07,
+            "max_diff_rmse_v": 4.987885660057145e-09,
+            "max_diff_rmse_3d": 3.1509583919842044e-07,
+            "max_reldiff_mean_nis": 1.1328861013370017e-11,
+            "tol_rmse": 1e-06,
+            "tol_nis_rel": 1e-06,
+            "t_cpu": 115.16736149999997,
+            "t_gpu": 51.03781060000074,
+            "cpu_workers": 12,
+            "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "torch": "2.14.1+cu126",
+            "max_scaled_diff": 7.111148289532828e-09,
+            "passed": true,
+            "max_diff_tracker_vs_cpu": 7.1093916814908256e-09,
+            "optimizer": "GA",
+            "seed": 1,
+            "generation": 1
+          },
+          "baseline": {
+            "rmse_h": 6.582036311854285,
+            "rmse_gps": 3.0927741024510804
+          },
+          "optimizers": {
+            "GA": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 3816.477557100001,
+              "incumbents_s": 62.673296499999196,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "PSO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 3819.0780803,
+              "incumbents_s": 62.36781390000033,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "DE": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 3818.595989900001,
+              "incumbents_s": 55.95910670000012,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "GWO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 3818.7759855999975,
+              "incumbents_s": 62.58681360000264,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            }
+          },
+          "wall_clock_s": 15837.7483508
+        },
+        "inavwhu/street00_outages_s0": {
+          "theta0": {
+            "log_q_acc": -5.571947835576246,
+            "log_q_gyro": -8.842929505791004,
+            "log_q_ba": -5.0,
+            "log_q_bg": -8.0,
+            "log_r_xy": -0.011813881593188422,
+            "log_r_z": 0.47251764873206253,
+            "log_r_vel": 0.0
+          },
+          "validation": {
+            "n_candidates": 24,
+            "n_failed_cpu": 0,
+            "n_unstable_excluded": 0,
+            "nis_unstable": 1000.0,
+            "max_diff_fitness_unstable": 0.0,
+            "ok_flags_agree": true,
+            "max_diff_fitness": 6.319700673884654e-08,
+            "max_diff_rmse_h": 2.381925412464625e-08,
+            "max_diff_rmse_v": 4.817681364954751e-09,
+            "max_diff_rmse_3d": 2.3350565925284172e-08,
+            "max_reldiff_mean_nis": 3.047715751052544e-12,
+            "tol_rmse": 1e-06,
+            "tol_nis_rel": 1e-06,
+            "t_cpu": 123.36710279999897,
+            "t_gpu": 53.82255690000238,
+            "cpu_workers": 12,
+            "device": "NVIDIA GeForce RTX 4060 Laptop GPU",
+            "torch": "2.14.1+cu126",
+            "max_scaled_diff": 7.528086391614406e-10,
+            "passed": true,
+            "max_diff_tracker_vs_cpu": 3.027466607384212e-10,
+            "optimizer": "GA",
+            "seed": 1,
+            "generation": 1
+          },
+          "baseline": {
+            "rmse_h": 3.940018118316323,
+            "rmse_gps": 3.2019777855473177
+          },
+          "optimizers": {
+            "GA": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 4024.4581301000035,
+              "incumbents_s": 65.7137051000027,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "PSO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 4026.751061499999,
+              "incumbents_s": 71.06367060000048,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "DE": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 4026.254335999998,
+              "incumbents_s": 59.937260899998364,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            },
+            "GWO": {
+              "seeds_run": [
+                1,
+                2,
+                3,
+                4,
+                5
+              ],
+              "search_s": 4025.5931100000016,
+              "incumbents_s": 70.83865850000439,
+              "checks": [
+                {
+                  "seed": 1,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 2,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 3,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 4,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                },
+                {
+                  "seed": 5,
+                  "n_evals": 1000,
+                  "n_objective_evals": 1000,
+                  "convergence_rows": 1000,
+                  "ok": true
+                }
+              ]
+            }
+          },
+          "wall_clock_s": 16711.624260099998
+        }
+      },
+      "finished": "2026-11-22T10:50:36",
+      "wall_clock_s": 35096.7861099
+    }
+  ]
+}
