@@ -19,5 +19,4 @@ processed_data/*
 results/**/.main.lock
 results_smoke/
 .tile_cache/
-!processed_data/eth_gps16m_nov_s0/
 !processed_data/eth_outages_s0/
