@@ -1,2 +1,0 @@
-k,generation,fitness,best_so_far,elapsed,log_q_acc,log_q_gyro,log_q_ba,log_q_bg,log_r_xy,log_r_z,log_r_vel
-1,1,10.818408535697046,10.818408535697046,3.732901499955915,0.2,-3.0,-5.0,-8.0,2.424881636631067,2.783634044925822,0.0
