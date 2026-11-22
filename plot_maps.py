@@ -2,7 +2,7 @@
 the best tuned run of every optimizer.
 
     python plot_maps.py                                   # every dataset of main.py's scenario
-    python plot_maps.py --root results/gps16m --datasets eth_gps16m_nov_s0
+    python plot_maps.py --datasets eth_outages_s0          # one dataset
 
 Writes results/<scenario>/<dataset>/map.png (static, OSM tiles: one map per filter, baseline, GA, PSO, DE and GWO,
 each with the GPS fixes and the ground truth) and map.html (interactive, all tracks in one map:

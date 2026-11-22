@@ -1,8 +1,7 @@
 """Remove the generated data of one scenario so the next `python main.py` starts it from scratch.
 
     python reset.py                    # the current scenario (main.SCENARIO): list, then ask before removing
-    python reset.py --scenario gps16m  # the saved first run instead
-    python reset.py --all              # every scenario, results_smoke/, every derived dataset and the tile cache
+    python reset.py --all              # all of results/ and results_smoke/, every derived dataset and the tile cache
     python reset.py --yes              # remove without asking
 
 For a scenario it removes results/<scenario>/ and results_smoke/<scenario>/ (every run, table and figure)

@@ -1,7 +1,6 @@
 """Tables and graphs from main.py's results.
 
     python plot_response.py                         # every dataset under results/<scenario>/, then its summary/
-    python plot_response.py --root results/gps16m   # the saved first run
 
 Per dataset (results/<scenario>/<dataset>/), from runs.csv and convergence_seed<s>.csv of baseline, GA,
 PSO, DE and GWO (written by ekf.save_run):

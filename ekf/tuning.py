@@ -44,7 +44,7 @@ def set_search_space(theta0):
 PENALTY = 1e6           # fitness of a run that fails; above any run that does not (|position| < MAX_POSITION = 1e6 m)
 # The objective J = RMSE_h * (1 + nis_weight * |log10(mean NIS / dof)|): a consistent filter (mean NIS =
 # dof) scores its RMSE_h, one whose NIS is 10x too high or too low counts as nis_weight + 1 times worse.
-# nis_weight = 0 is RMSE_h alone (run 1, scenario gps16m). main.py sets it per scenario.
+# nis_weight = 0 is RMSE_h alone. main.py sets it per scenario.
 OBJECTIVE = {"nis_weight": 1.0}
 NIS_DOF = N_MEAS        # full GPS position + velocity: a consistent filter averages NIS = 6.
                         # A dataset missing channels has fewer: use ekf.nis_dof(data)

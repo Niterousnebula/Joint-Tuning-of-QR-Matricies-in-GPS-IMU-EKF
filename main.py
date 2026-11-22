@@ -5,17 +5,15 @@ tables and graphs.
     python main.py --plan          # prepare the datasets, print the plan and a time estimate
     python main.py --plots-only    # rebuild tables and figures from results/<scenario>/
     python main.py --smoke         # tiny budget into results_smoke/<scenario>/, checks the pipeline
-    python main.py --scenario gps16m   # the saved first run (any of the commands above)
 
 Scenarios (SCENARIOS below), each on eth, inavwhu/playground00 and inavwhu/street00, results in
 results/<scenario>/:
     outages   (default) the raw GPS, except three sections of 250 ft (76.2 m) of travel at 25, 50 and
               75 % of the path: about 5 m added error, about 15 m, and a complete outage. Also writes
               sections.md/png (plot_sections.py): how each filter behaves in those sections.
-    gps16m    the first run, kept in results/gps16m/: 16 m white GPS noise everywhere, position-only.
-Optimizer score (NIS_WEIGHT): outages scores accuracy and consistency together, score = RMSE_h * (1 + |log10(mean
-NIS / dof)|) (ekf.tuning.objective_value); gps16m keeps run 1's RMSE_h alone. GPS plausibility rule
-(PLAUSIBILITY): outages discards any fix the platform could not have reached (ekf.filter.OPTIONS).
+Optimizer score (NIS_WEIGHT): accuracy and consistency together, score = RMSE_h * (1 + |log10(mean
+NIS / dof)|) (ekf.tuning.objective_value). GPS plausibility rule (PLAUSIBILITY): discard any fix the
+platform could not have reached (ekf.filter.OPTIONS).
 Preparing the datasets processes raw_data/ if needed and writes the degraded copies
 (make_noisy_gps.py); both are skipped when the files exist. Optimizers, one after another so the GPU
 serves one at a time: GA, PSO, DE, GWO, each with its own config (population 100, 1,000
@@ -55,27 +53,20 @@ import ekf
 import plot_maps
 import plot_response
 import plot_sections
-from make_noisy_gps import SECTION_M, SECTIONS, derived_id, make, make_sections, sections_id
+from make_noisy_gps import SECTION_M, SECTIONS, make_sections, sections_id
 
 SOURCES = ["eth", "inavwhu/playground00", "inavwhu/street00"]
-# Scenario gps16m: white GPS position noise per dataset (m, horizontal; vertical 1.5x, seed 0): 16 m, a raw
-# GPS error of about 18.5 m (a poor receiver). Every dataset is position-only: iNav-WHU's F9P has no
-# velocity, and ETH's velocity is dropped (with it, the clean velocity carries the filter and tuning
-# gains < 1 %). (README, "GPS noise").
-NOISE = {source: 16.0 for source in SOURCES}
-DROP_VELOCITY = {"eth"}
 # Scenario outages: raw GPS with the make_noisy_gps.SECTIONS degraded (5 m, 15 m, outage), seed 0.
 SCENARIOS = {
     "outages": [sections_id(source) for source in SOURCES],
-    "gps16m": [derived_id(source, NOISE[source], 0.0, 60.0, 0, source in DROP_VELOCITY) for source in SOURCES],
 }
 SCENARIO = "outages"
 DATASETS = SCENARIOS[SCENARIO]
 # Weight of NIS consistency in the objective per scenario (ekf.tuning.OBJECTIVE): 0 = RMSE_h alone.
-NIS_WEIGHT = {"outages": 1.0, "gps16m": 0.0}
+NIS_WEIGHT = {"outages": 1.0}
 # GPS plausibility rule per scenario (ekf.filter.OPTIONS["plausibility"]: discard a fix the platform could
-# not have reached since the last accepted one). Off for gps16m, which ran without it.
-PLAUSIBILITY = {"outages": True, "gps16m": False}
+# not have reached since the last accepted one).
+PLAUSIBILITY = {"outages": True}
 OPTIMIZERS = ["GA", "PSO", "DE", "GWO"]
 LIVE_LOGS = {"PSO": "pso_log.csv", "DE": "de_log.csv", "GWO": "gwo_log.csv"}   # GA keeps no live log
 SMOKE = {"population_size": 4, "max_evals": 8, "seeds": (1,), "validate": 4}
@@ -153,13 +144,6 @@ def prepare(datasets):
     A copy is written again when its recorded settings differ from the ones here (the folder name does
     not show them all). Making a copy processes its source from raw_data/ first if needed."""
     for source in SOURCES:
-        drop = source in DROP_VELOCITY
-        noisy = derived_id(source, NOISE[source], 0.0, 60.0, 0, drop)
-        if noisy in datasets:
-            noise = _meta(noisy).get("gps_noise", {})
-            if (noise.get("sigma_h_m"), noise.get("sigma_vel_ms"), noise.get("gm_sigma_m"), noise.get("seed"),
-                    noise.get("velocity_dropped", False)) != (NOISE[source], 0.0, 0.0, 0, drop):
-                make(source, NOISE[source], drop_vel=drop)
         if sections_id(source) in datasets:
             got = _meta(sections_id(source)).get("gps_sections", {})
             have = [{k: s.get(k) for k in want} for s, want in zip(got.get("sections", []), SECTIONS)]
